@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Paperclip, AlertTriangle, ExternalLink } from "lucide-react"
+import { Paperclip, AlertTriangle, ExternalLink, ShieldAlert, Loader2 } from "lucide-react"
 import { uploadFile } from "@/lib/storage-utils"
 import Link from "next/link"
 
@@ -21,6 +21,8 @@ export function FileUpload({ onFileUpload, bucket, folder, accept = "*", maxSize
   const [isUploading, setIsUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isBucketMissing, setIsBucketMissing] = useState(false)
+  const [isRLSError, setIsRLSError] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -36,9 +38,26 @@ export function FileUpload({ onFileUpload, bucket, folder, accept = "*", maxSize
     setIsUploading(true)
     setError(null)
     setIsBucketMissing(false)
+    setIsRLSError(false)
+    setUploadProgress(0)
 
     try {
+      // Log file details for debugging
+      console.log(`Uploading file: ${file.name}, type: ${file.type}, size: ${file.size} bytes`)
+
+      // Simulate progress updates
+      const progressInterval = setInterval(() => {
+        setUploadProgress((prev) => {
+          if (prev < 90) return prev + 10
+          return prev
+        })
+      }, 300)
+
       const url = await uploadFile(file, bucket, folder)
+
+      clearInterval(progressInterval)
+      setUploadProgress(100)
+
       if (url) {
         onFileUpload(url)
       } else {
@@ -49,9 +68,21 @@ export function FileUpload({ onFileUpload, bucket, folder, accept = "*", maxSize
 
       // Provide a more specific error message
       if (err instanceof Error) {
-        if (err.message.includes("Bucket") || err.message.includes("bucket")) {
+        if (
+          err.message.includes("row-level security") ||
+          err.message.includes("policy") ||
+          err.message.includes("permission denied")
+        ) {
+          setError(`Permission denied: You don't have access to upload files to this bucket.`)
+          setIsRLSError(true)
+        } else if (err.message.includes("Bucket") || err.message.includes("bucket")) {
           setError(`Storage bucket issue: ${err.message}`)
           setIsBucketMissing(true)
+        } else if (err.message.includes("permission") || err.message.includes("access")) {
+          setError(`Permission error: ${err.message}. Please check your storage bucket permissions.`)
+          setIsRLSError(true)
+        } else if (err.message.includes("content type") || err.message.includes("Content-Type")) {
+          setError(`File type error: ${err.message}. Try a different file format.`)
         } else {
           setError(`Upload error: ${err.message}`)
         }
@@ -77,8 +108,17 @@ export function FileUpload({ onFileUpload, bucket, folder, accept = "*", maxSize
           onClick={() => fileInputRef.current?.click()}
           disabled={isUploading || isBucketMissing}
         >
-          <Paperclip className="mr-2 h-4 w-4" />
-          {isUploading ? "Uploading..." : "Attach File"}
+          {isUploading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Uploading... {uploadProgress}%
+            </>
+          ) : (
+            <>
+              <Paperclip className="mr-2 h-4 w-4" />
+              Attach File
+            </>
+          )}
         </Button>
         <Input ref={fileInputRef} type="file" accept={accept} onChange={handleFileChange} className="hidden" />
       </div>
@@ -88,6 +128,27 @@ export function FileUpload({ onFileUpload, bucket, folder, accept = "*", maxSize
             <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
             <p>{error}</p>
           </div>
+
+          {isRLSError && (
+            <div className="ml-6 space-y-1 p-2 bg-amber-50 border border-amber-200 rounded-md">
+              <div className="flex items-start gap-2">
+                <ShieldAlert className="h-4 w-4 mt-0.5 text-amber-600" />
+                <div>
+                  <p className="font-medium text-amber-800">Row Level Security (RLS) Policy Issue</p>
+                  <p className="text-amber-700 mt-1">
+                    This is a permission issue with the Supabase storage bucket. The administrator needs to update the
+                    RLS policies to allow file uploads.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-2">
+                <Link href="/admin/setup" className="text-blue-600 hover:underline inline-flex items-center">
+                  View Setup Instructions
+                </Link>
+              </div>
+            </div>
+          )}
+
           {isBucketMissing && (
             <div className="ml-6 space-y-1">
               <p>The required storage bucket needs to be set up by an administrator.</p>

@@ -1,38 +1,31 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState, useEffect } from "react"
 import { useAuth } from "@/contexts/auth-context"
 import { useRouter } from "next/navigation"
-import { getSupabaseClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
-import { Plus, Edit, Trash2, Paperclip } from "lucide-react"
-import { formatDistanceToNow } from "date-fns"
-import type { Database } from "@/lib/database.types"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Plus, FileText } from "lucide-react"
+import { WeekSelector } from "@/components/week-selector"
+import { DailyReportSummary } from "@/components/daily-report-summary"
+import { startOfWeek, endOfWeek, eachDayOfInterval, format, isWeekend } from "date-fns"
 import Link from "next/link"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle } from "lucide-react"
-import { FilePreview } from "@/components/file-preview"
-
-type CallNote = Database["public"]["Tables"]["call_notes"]["Row"]
-
-// Define the bucket name as a constant to ensure consistency
-const ATTACHMENTS_BUCKET = "attachments"
-
-// Get a reference to the Supabase client
-const supabase = getSupabaseClient()
 
 export default function SubmitterDashboardPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
-  const [callNotes, setCallNotes] = useState<CallNote[]>([])
-  const [isLoadingNotes, setIsLoadingNotes] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [expandedAttachments, setExpandedAttachments] = useState<Record<string, boolean>>({})
+  const [showWeekends, setShowWeekends] = useState<boolean>(false)
 
-  useEffect(() => {
-    //  setExpandedAttachments] = useState<Record<string, boolean>>({})
-  }, [])
+  // Initialize with weekdays only
+  const today = new Date()
+  const initialWeekStart = startOfWeek(today, { weekStartsOn: 0 })
+  const initialWeekEnd = endOfWeek(today, { weekStartsOn: 0 })
+  const allDaysOfWeek = eachDayOfInterval({ start: initialWeekStart, end: initialWeekEnd })
+  const initialDays = allDaysOfWeek.filter((day) => !isWeekend(day))
+
+  const [weekStart, setWeekStart] = useState<Date>(initialWeekStart)
+  const [weekEnd, setWeekEnd] = useState<Date>(initialWeekEnd)
+  const [daysOfWeek, setDaysOfWeek] = useState<Date[]>(initialDays)
 
   useEffect(() => {
     // Check if user is submitter, if not redirect
@@ -52,68 +45,17 @@ export default function SubmitterDashboardPage() {
     }
   }, [user, isLoading, router])
 
-  useEffect(() => {
-    const fetchCallNotes = async () => {
-      if (isLoading || !user || user.role !== "submitter") return
-
-      try {
-        console.log("Fetching call notes for submitter")
-        setIsLoadingNotes(true)
-
-        const { data, error } = await supabase
-          .from("call_notes")
-          .select("*")
-          .eq("submitter_id", user.id)
-          .order("call_date", { ascending: false })
-
-        if (error) {
-          console.error("Error fetching call notes:", error)
-          setError(`Failed to fetch call notes: ${error.message}`)
-          return
-        }
-
-        console.log("Call notes fetched:", data?.length || 0)
-        setCallNotes(data)
-      } catch (err) {
-        console.error("Unexpected error fetching call notes:", err)
-        setError(`An unexpected error occurred: ${err instanceof Error ? err.message : String(err)}`)
-      } finally {
-        setIsLoadingNotes(false)
-      }
-    }
-
-    fetchCallNotes()
-  }, [user, isLoading])
-
-  const handleDeleteNote = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this note?")) {
-      return
-    }
-
-    try {
-      const { error } = await supabase.from("call_notes").delete().eq("id", id)
-
-      if (error) {
-        console.error("Error deleting note:", error)
-        setError(`Failed to delete note: ${error.message}`)
-        return
-      }
-
-      setCallNotes(callNotes.filter((note) => note.id !== id))
-    } catch (err) {
-      console.error("Unexpected error deleting note:", err)
-      setError(`An unexpected error occurred: ${err instanceof Error ? err.message : String(err)}`)
-    }
+  const handleWeekChange = (newWeekStart: Date, newWeekEnd: Date, days: Date[]) => {
+    setWeekStart(newWeekStart)
+    setWeekEnd(newWeekEnd)
+    setDaysOfWeek(days)
   }
 
-  const toggleAttachments = (noteId: string) => {
-    setExpandedAttachments((prev) => ({
-      ...prev,
-      [noteId]: !prev[noteId],
-    }))
+  const handleToggleWeekends = (show: boolean) => {
+    setShowWeekends(show)
   }
 
-  if (isLoading || isLoadingNotes) {
+  if (isLoading) {
     return (
       <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-gray-900"></div>
@@ -121,81 +63,49 @@ export default function SubmitterDashboardPage() {
     )
   }
 
-  if (error) {
-    return (
-      <Alert variant="destructive" className="mx-auto max-w-2xl">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>{error}</AlertDescription>
-      </Alert>
-    )
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Your Call Notes</h2>
-          <p className="text-muted-foreground">Manage your call notes and add new ones.</p>
+          <h2 className="text-2xl font-bold tracking-tight">Your Dashboard</h2>
+          <p className="text-muted-foreground">Manage your daily and weekly call reports</p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/submitter/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Add New Note
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button asChild>
+            <Link href="/dashboard/submitter/reports/daily">
+              <Plus className="mr-2 h-4 w-4" />
+              New Daily Report
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/dashboard/submitter/reports/weekly">
+              <FileText className="mr-2 h-4 w-4" />
+              Weekly Summary
+            </Link>
+          </Button>
+        </div>
       </div>
 
-      {callNotes.length === 0 ? (
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-center text-muted-foreground">You haven't added any call notes yet.</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {callNotes.map((note) => (
-            <Card key={note.id}>
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between">
-                  <CardTitle className="text-lg">{note.client_name}</CardTitle>
-                  <div className="flex space-x-2">
-                    <Button variant="ghost" size="icon" asChild>
-                      <Link href={`/dashboard/submitter/edit/${note.id}`}>
-                        <Edit className="h-4 w-4" />
-                        <span className="sr-only">Edit</span>
-                      </Link>
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDeleteNote(note.id)}>
-                      <Trash2 className="h-4 w-4" />
-                      <span className="sr-only">Delete</span>
-                    </Button>
-                  </div>
-                </div>
-                <CardDescription>{formatDistanceToNow(new Date(note.call_date), { addSuffix: true })}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="line-clamp-3 text-sm text-muted-foreground">{note.notes}</p>
-              </CardContent>
-              {note.attachments && note.attachments.length > 0 && (
-                <CardFooter className="flex flex-col items-start pt-0">
-                  <Button variant="ghost" size="sm" className="mb-2 px-0" onClick={() => toggleAttachments(note.id)}>
-                    <Paperclip className="mr-2 h-4 w-4" />
-                    {note.attachments.length} Attachment{note.attachments.length !== 1 ? "s" : ""}
-                  </Button>
+      <Card>
+        <CardHeader>
+          <CardTitle>Weekly Overview</CardTitle>
+          <CardDescription>View and manage your daily reports for the week</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <WeekSelector
+            currentDate={new Date()}
+            onWeekChange={handleWeekChange}
+            showWeekends={showWeekends}
+            onToggleWeekends={handleToggleWeekends}
+          />
 
-                  {expandedAttachments[note.id] && (
-                    <div className="w-full space-y-2">
-                      {note.attachments.map((url, index) => (
-                        <FilePreview key={index} url={url} bucket={ATTACHMENTS_BUCKET} />
-                      ))}
-                    </div>
-                  )}
-                </CardFooter>
-              )}
-            </Card>
-          ))}
-        </div>
-      )}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+            {daysOfWeek.map((day) => (
+              <DailyReportSummary key={format(day, "yyyy-MM-dd")} date={day} userId={user?.id || ""} />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

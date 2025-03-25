@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle, CheckCircle, Info, ExternalLink, ShieldAlert } from "lucide-react"
 import { BackButton } from "@/components/back-button"
-import Link from "next/link"
+import { StorageRLSGuide } from "@/components/storage-rls-guide"
 
 // Define the buckets we need
 const REQUIRED_BUCKETS = [
@@ -32,8 +32,6 @@ export default function SetupPage() {
   const [success, setSuccess] = useState<string | null>(null)
   const [lastChecked, setLastChecked] = useState<Date | null>(null)
   const [showRlsInfo, setShowRlsInfo] = useState(false)
-
-  const supabase = getSupabaseClient()
 
   // Memoize the checkBuckets function to prevent recreation on each render
   const checkBuckets = useCallback(async () => {
@@ -164,13 +162,13 @@ export default function SetupPage() {
     } finally {
       setIsChecking(false)
     }
-  }, [supabase, isChecking])
+  }, [isChecking])
 
   // Check buckets on initial load only
   useEffect(() => {
     // Only run once on component mount
     checkBuckets()
-  }, [])
+  }, [checkBuckets])
 
   const getMissingBuckets = () => {
     return REQUIRED_BUCKETS.filter((bucket) => !bucketStatus[bucket.name])
@@ -245,7 +243,7 @@ export default function SetupPage() {
             )}
 
             {success && (
-              <Alert variant="default" className="border-green-500 bg-green-50 text-green-700">
+              <Alert className="border-green-500 bg-green-50 text-green-700">
                 <CheckCircle className="h-4 w-4 text-green-500" />
                 <AlertTitle>Success</AlertTitle>
                 <AlertDescription>{success}</AlertDescription>
@@ -313,7 +311,7 @@ export default function SetupPage() {
               </ul>
 
               {hasMissingBuckets() && (
-                <Alert variant="default" className="bg-amber-50 border-amber-200 text-amber-800">
+                <Alert className="bg-amber-50 border-amber-200 text-amber-800">
                   <Info className="h-4 w-4 text-amber-500" />
                   <AlertTitle>Manual Setup Required</AlertTitle>
                   <AlertDescription className="text-sm">
@@ -361,53 +359,59 @@ export default function SetupPage() {
                   </AlertDescription>
                 </Alert>
               )}
+            </div>
 
-              {/* RLS Policy Information */}
-              <Alert variant="default" className="bg-blue-50 border-blue-200">
-                <Info className="h-4 w-4 text-blue-500" />
-                <AlertTitle>About Supabase Storage</AlertTitle>
-                <AlertDescription className="text-sm">
-                  <p>
-                    Supabase Storage uses row-level security (RLS) policies to control access to buckets and files.
-                    Creating buckets requires admin privileges in the Supabase dashboard.
-                  </p>
-                  <p className="mt-2">
-                    Once buckets are created, you'll need to configure RLS policies to control who can upload and access
-                    files. By default, public buckets allow anyone to read files but restrict uploads to authenticated
-                    users.
-                  </p>
+            {/* Storage RLS Guide */}
+            <div className="mt-6">
+              <StorageRLSGuide />
+            </div>
 
-                  <Button
-                    variant="link"
-                    className="p-0 h-auto mt-1 text-blue-600"
-                    onClick={() => setShowRlsInfo(!showRlsInfo)}
-                  >
-                    {showRlsInfo ? "Hide RLS policy information" : "Show RLS policy information"}
-                  </Button>
+            {/* RLS Policy Information */}
+            <Alert className="bg-blue-50 border-blue-200">
+              <Info className="h-4 w-4 text-blue-500" />
+              <AlertTitle>About Supabase Storage</AlertTitle>
+              <AlertDescription className="text-sm">
+                <p>
+                  Supabase Storage uses row-level security (RLS) policies to control access to buckets and files.
+                  Creating buckets requires admin privileges in the Supabase dashboard.
+                </p>
+                <p className="mt-2">
+                  Once buckets are created, you'll need to configure RLS policies to control who can upload and access
+                  files. By default, public buckets allow anyone to read files but restrict uploads to authenticated
+                  users.
+                </p>
 
-                  {showRlsInfo && (
-                    <div className="mt-3 p-3 bg-white border rounded-md">
-                      <div className="flex items-center gap-2 mb-2">
-                        <ShieldAlert className="h-4 w-4 text-amber-500" />
-                        <h4 className="font-medium">RLS Policy Information</h4>
-                      </div>
+                <Button
+                  variant="link"
+                  className="p-0 h-auto mt-1 text-blue-600"
+                  onClick={() => setShowRlsInfo(!showRlsInfo)}
+                >
+                  {showRlsInfo ? "Hide RLS policy information" : "Show RLS policy information"}
+                </Button>
 
-                      <p className="mb-2">
-                        If you're seeing "violates row-level security policy" errors, you need to configure appropriate
-                        RLS policies in the Supabase dashboard:
-                      </p>
+                {showRlsInfo && (
+                  <div className="mt-3 p-3 bg-white border rounded-md">
+                    <div className="flex items-center gap-2 mb-2">
+                      <ShieldAlert className="h-4 w-4 text-amber-500" />
+                      <h4 className="font-medium">RLS Policy Information</h4>
+                    </div>
 
-                      <ol className="list-decimal pl-5 space-y-1 mb-3">
-                        <li>Go to the Supabase Dashboard</li>
-                        <li>Navigate to Storage</li>
-                        <li>Select the bucket</li>
-                        <li>Click on "Policies" tab</li>
-                        <li>Add appropriate policies for your use case</li>
-                      </ol>
+                    <p className="mb-2">
+                      If you're seeing "violates row-level security policy" errors, you need to configure appropriate
+                      RLS policies in the Supabase dashboard:
+                    </p>
 
-                      <p className="font-medium mb-1">Example RLS Policy for Authenticated Users:</p>
-                      <pre className="bg-gray-100 p-2 rounded-md text-xs overflow-x-auto mb-2">
-                        {`-- Allow authenticated users to upload files
+                    <ol className="list-decimal pl-5 space-y-1 mb-3">
+                      <li>Go to the Supabase Dashboard</li>
+                      <li>Navigate to Storage</li>
+                      <li>Select the bucket</li>
+                      <li>Click on "Policies" tab</li>
+                      <li>Add appropriate policies for your use case</li>
+                    </ol>
+
+                    <p className="font-medium mb-1">Example RLS Policy for Authenticated Users:</p>
+                    <pre className="bg-gray-100 p-2 rounded-md text-xs overflow-x-auto mb-2">
+                      {`-- Allow authenticated users to upload files
 CREATE POLICY "Allow authenticated uploads"
 ON storage.objects
 FOR INSERT
@@ -420,25 +424,24 @@ ON storage.objects
 FOR SELECT
 TO authenticated
 USING (bucket_id = 'attachments' AND auth.uid() = owner);`}
-                      </pre>
+                    </pre>
 
-                      <p className="text-xs text-muted-foreground">
-                        Note: These are example policies. You should customize them based on your application's security
-                        requirements.
-                      </p>
-                    </div>
-                  )}
-                </AlertDescription>
-              </Alert>
-            </div>
+                    <p className="text-xs text-muted-foreground">
+                      Note: These are example policies. You should customize them based on your application's security
+                      requirements.
+                    </p>
+                  </div>
+                )}
+              </AlertDescription>
+            </Alert>
           </CardContent>
           <CardFooter className="flex justify-between">
             <Button variant="outline" onClick={handleCheckBuckets} disabled={isChecking}>
               {isChecking ? "Checking..." : "Check Buckets"}
             </Button>
 
-            <Button variant="default" asChild>
-              <Link
+            <Button asChild>
+              <a
                 href="https://app.supabase.com"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -446,7 +449,7 @@ USING (bucket_id = 'attachments' AND auth.uid() = owner);`}
               >
                 Open Supabase Dashboard
                 <ExternalLink className="ml-2 h-4 w-4" />
-              </Link>
+              </a>
             </Button>
           </CardFooter>
         </Card>

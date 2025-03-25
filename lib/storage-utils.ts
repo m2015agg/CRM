@@ -1,140 +1,118 @@
-import { getSupabaseClient } from "./supabase/client"
+import { getSupabaseClient } from "@/lib/supabase/client"
 import { v4 as uuidv4 } from "uuid"
 
-// Cache bucket existence to avoid repeated checks
-const bucketExistsCache: Record<string, boolean> = {}
-const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
-const bucketCacheTimestamps: Record<string, number> = {}
+// Define bucket constants
+export const ATTACHMENTS_BUCKET = "attachments"
+export const AVATARS_BUCKET = "avatars"
+export const RECEIPTS_BUCKET = "receipts"
 
-// Function to ensure a bucket exists before uploading
-async function ensureBucketExists(bucket: string, forceCheck = false): Promise<boolean> {
-  try {
-    // Check cache first if not forcing a check
-    const now = Date.now()
-    if (
-      !forceCheck &&
-      bucketExistsCache[bucket] !== undefined &&
-      bucketCacheTimestamps[bucket] &&
-      now - bucketCacheTimestamps[bucket] < CACHE_DURATION
-    ) {
-      return bucketExistsCache[bucket]
-    }
-
-    const supabase = getSupabaseClient()
-
-    // First try to check by listing files in the bucket
-    try {
-      const { data, error } = await supabase.storage.from(bucket).list()
-
-      if (!error) {
-        // If we can list files (even if empty), the bucket exists
-        console.log(`Bucket ${bucket} exists (verified by listing files)`)
-        bucketExistsCache[bucket] = true
-        bucketCacheTimestamps[bucket] = now
-        return true
-      }
-    } catch (err) {
-      console.log(`Could not verify bucket ${bucket} by listing files:`, err)
-      // Continue to the next method if this fails
-    }
-
-    // Fallback: try listing all buckets
-    try {
-      const { data: buckets, error: listError } = await supabase.storage.listBuckets()
-
-      if (listError) {
-        console.error("Error listing buckets:", listError)
-        return false
-      }
-
-      // Check if our bucket is in the list (case insensitive)
-      const bucketExists = buckets.some((b) => b.name.toLowerCase() === bucket.toLowerCase())
-
-      // Update cache
-      bucketExistsCache[bucket] = bucketExists
-      bucketCacheTimestamps[bucket] = now
-
-      if (!bucketExists) {
-        console.log(`Bucket '${bucket}' not found. This requires admin configuration.`)
-      }
-
-      return bucketExists
-    } catch (err) {
-      console.error("Error listing buckets:", err)
-      return false
-    }
-  } catch (error) {
-    console.error("Error in ensureBucketExists:", error)
-    return false
-  }
-}
-
-export async function uploadFile(file: File, bucket: string, folder: string): Promise<string | null> {
+/**
+ * Uploads a file to Supabase Storage
+ * @param file The file to upload
+ * @param bucket The storage bucket name
+ * @param folder Optional folder path within the bucket
+ * @returns The URL of the uploaded file
+ */
+export async function uploadFile(file: File, bucket: string, folder = ""): Promise<string> {
   try {
     const supabase = getSupabaseClient()
 
-    // Ensure bucket exists before uploading
-    const bucketExists = await ensureBucketExists(bucket)
-    if (!bucketExists) {
-      throw new Error(
-        `Storage bucket '${bucket}' does not exist. This bucket needs to be created in the Supabase dashboard by an administrator.`,
-      )
-    }
-
+    // Generate a unique file name to prevent collisions
     const fileExt = file.name.split(".").pop()
-    const fileName = `${folder}/${uuidv4()}.${fileExt}`
+    const fileName = `${uuidv4()}.${fileExt}`
 
-    console.log(`Uploading file to ${bucket}/${fileName}`)
-    const { data, error } = await supabase.storage.from(bucket).upload(fileName, file, {
+    // Create the full path including the folder if provided
+    const filePath = folder ? `${folder}/${fileName}` : fileName
+
+    console.log(`Uploading file to ${bucket}/${filePath}`)
+
+    const { data, error } = await supabase.storage.from(bucket).upload(filePath, file, {
       cacheControl: "3600",
       upsert: false,
     })
 
     if (error) {
       console.error("Error uploading file:", error)
+
+      // Provide more specific error messages
+      if (error.message.includes("row-level security") || error.message.includes("policy")) {
+        throw new Error(`Row-level security policy violation: ${error.message}`)
+      } else if (error.message.includes("bucket") || error.message.includes("Bucket")) {
+        throw new Error(`Storage bucket error: ${error.message}`)
+      }
+
       throw error
     }
 
-    // Get public URL
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from(bucket).getPublicUrl(data.path)
+    if (!data?.path) {
+      throw new Error("File upload failed: No path returned")
+    }
 
-    console.log(`File uploaded successfully. Public URL: ${publicUrl}`)
-    return publicUrl
+    // Return the full path including the bucket name for easier reference
+    return `${bucket}/${data.path}`
   } catch (error) {
     console.error("Error in uploadFile:", error)
     throw error
   }
 }
 
-export async function deleteFile(path: string, bucket: string): Promise<boolean> {
+/**
+ * Gets the public URL for a file in Supabase Storage
+ * @param bucket The storage bucket name
+ * @param path The file path within the bucket
+ * @returns The public URL of the file
+ */
+export async function getFileUrl(bucket: string, path: string): Promise<string> {
   try {
     const supabase = getSupabaseClient()
 
-    // Ensure bucket exists before attempting to delete
-    const bucketExists = await ensureBucketExists(bucket)
-    if (!bucketExists) {
-      throw new Error(
-        `Storage bucket '${bucket}' does not exist. This bucket needs to be created in the Supabase dashboard by an administrator.`,
-      )
+    // Try to get a signed URL first (works even for private buckets)
+    const { data: signedData, error: signedError } = await supabase.storage.from(bucket).createSignedUrl(path, 3600) // 1 hour expiry
+
+    if (!signedError && signedData?.signedUrl) {
+      return signedData.signedUrl
     }
 
-    // Extract the file path from the public URL
-    const urlParts = path.split(`${bucket}/`)
-    if (urlParts.length < 2) return false
+    // Fall back to public URL if signed URL fails
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path)
 
-    const filePath = urlParts[1]
+    if (!data?.publicUrl) {
+      throw new Error("Failed to get file URL")
+    }
 
-    console.log(`Deleting file: ${bucket}/${filePath}`)
-    const { error } = await supabase.storage.from(bucket).remove([filePath])
+    return data.publicUrl
+  } catch (error) {
+    console.error("Error in getFileUrl:", error)
+    throw error
+  }
+}
+
+/**
+ * Deletes a file from Supabase Storage
+ * @param url The file URL or path
+ * @returns A boolean indicating success
+ */
+export async function deleteFile(url: string): Promise<boolean> {
+  try {
+    const supabase = getSupabaseClient()
+
+    // Parse the URL to extract bucket and path
+    const fileInfo = parseStorageUrl(url)
+
+    if (!fileInfo) {
+      console.error("Invalid file URL format:", url)
+      return false
+    }
+
+    const { bucket, path } = fileInfo
+
+    const { error } = await supabase.storage.from(bucket).remove([path])
 
     if (error) {
       console.error("Error deleting file:", error)
       return false
     }
 
-    console.log(`File deleted successfully: ${bucket}/${filePath}`)
     return true
   } catch (error) {
     console.error("Error in deleteFile:", error)
@@ -142,76 +120,228 @@ export async function deleteFile(path: string, bucket: string): Promise<boolean>
   }
 }
 
-// Function to clear the bucket cache
-export function clearBucketCache() {
-  Object.keys(bucketExistsCache).forEach((key) => {
-    delete bucketExistsCache[key]
-    delete bucketCacheTimestamps[key]
-  })
+/**
+ * Parses a storage URL to extract bucket and path
+ * @param url The storage URL to parse
+ * @returns An object containing the bucket and path
+ */
+export function parseStorageUrl(url: string): { bucket: string; path: string } | null {
+  // Handle full Supabase URLs
+  // Format: https://[project].supabase.co/storage/v1/object/public/[bucket]/[path]
+  const fullUrlMatch = url.match(/\/storage\/v1\/object\/(?:public|sign)\/([^/]+)\/(.+)/)
+  if (fullUrlMatch) {
+    return {
+      bucket: fullUrlMatch[1],
+      path: fullUrlMatch[2],
+    }
+  }
+
+  // Handle bucket/path format
+  // Format: [bucket]/[path]
+  if (!url.startsWith("http")) {
+    const parts = url.split("/")
+    if (parts.length >= 2) {
+      return {
+        bucket: parts[0],
+        path: parts.slice(1).join("/"),
+      }
+    }
+  }
+
+  return null
 }
 
-// Revised function to test bucket access without violating RLS policies
-export async function testBucketAccess(
-  bucket: string,
-): Promise<{ exists: boolean; canRead: boolean; canWrite: boolean; message: string }> {
+/**
+ * Lists all files in a folder
+ * @param bucket The storage bucket name
+ * @param folder The folder path within the bucket
+ * @returns An array of file objects
+ */
+export async function listFiles(bucket: string, folder = ""): Promise<Array<{ name: string; url: string }>> {
   try {
     const supabase = getSupabaseClient()
-    const result = {
-      exists: false,
-      canRead: false,
-      canWrite: false,
-      message: "",
+
+    const { data, error } = await supabase.storage.from(bucket).list(folder)
+
+    if (error) {
+      console.error("Error listing files:", error)
+      throw error
     }
 
-    // First check if we can list files (read access)
-    try {
-      const { data, error } = await supabase.storage.from(bucket).list()
-
-      if (!error) {
-        result.exists = true
-        result.canRead = true
-        result.message = "Bucket exists and you have read access."
-      } else if (error.message.includes("does not exist")) {
-        result.message = "Bucket does not exist."
-      } else if (error.message.includes("security policy")) {
-        result.exists = true
-        result.message = "Bucket exists but you don't have read access due to RLS policies."
-      } else {
-        result.message = `Error checking read access: ${error.message}`
-      }
-    } catch (err) {
-      result.message = `Error checking read access: ${err instanceof Error ? err.message : String(err)}`
+    if (!data) {
+      return []
     }
 
-    // Only test write access if the bucket exists
-    if (result.exists) {
-      try {
-        // Get bucket info to check if it's public
-        const { data: buckets, error: listError } = await supabase.storage.listBuckets()
+    // Filter out folders (items without a mimetype)
+    const files = data.filter((item) => !item.id.endsWith("/"))
 
-        if (!listError) {
-          const bucketInfo = buckets.find((b) => b.name.toLowerCase() === bucket.toLowerCase())
-          if (bucketInfo) {
-            result.message += ` Bucket is ${bucketInfo.public ? "public" : "private"}.`
-          }
+    // Get URLs for all files
+    const fileUrls = await Promise.all(
+      files.map(async (file) => {
+        const path = folder ? `${folder}/${file.name}` : file.name
+        const { data } = supabase.storage.from(bucket).getPublicUrl(path)
+        return {
+          name: file.name,
+          url: data.publicUrl,
         }
+      }),
+    )
 
-        // We won't actually try to upload a file since that's what caused the RLS violation
-        // Instead, we'll just note that write access requires proper RLS policies
-        result.message += " Write access requires appropriate RLS policies."
-      } catch (err) {
-        // Don't update the message if this fails
+    return fileUrls
+  } catch (error) {
+    console.error("Error in listFiles:", error)
+    throw error
+  }
+}
+
+/**
+ * Copies a file within storage
+ * @param sourceBucket Source bucket name
+ * @param sourcePath Source file path
+ * @param destBucket Destination bucket name
+ * @param destPath Destination file path
+ * @returns The URL of the copied file
+ */
+export async function copyFile(
+  sourceBucket: string,
+  sourcePath: string,
+  destBucket: string,
+  destPath: string,
+): Promise<string> {
+  try {
+    const supabase = getSupabaseClient()
+
+    // Download the file
+    const { data: fileData, error: downloadError } = await supabase.storage.from(sourceBucket).download(sourcePath)
+
+    if (downloadError) {
+      console.error("Error downloading file for copy:", downloadError)
+      throw downloadError
+    }
+
+    if (!fileData) {
+      throw new Error("No file data received")
+    }
+
+    // Upload to the destination
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from(destBucket)
+      .upload(destPath, fileData, {
+        cacheControl: "3600",
+        upsert: false,
+      })
+
+    if (uploadError) {
+      console.error("Error uploading copied file:", uploadError)
+      throw uploadError
+    }
+
+    if (!uploadData?.path) {
+      throw new Error("File copy failed: No path returned")
+    }
+
+    // Return the full path including the bucket name
+    return `${destBucket}/${uploadData.path}`
+  } catch (error) {
+    console.error("Error in copyFile:", error)
+    throw error
+  }
+}
+
+/**
+ * Tests if a bucket exists and is accessible
+ * @param bucketName The name of the bucket to test
+ * @returns A status object with details about the bucket access
+ */
+export async function testBucketAccess(bucketName: string): Promise<{
+  exists: boolean
+  canRead: boolean
+  canWrite: boolean
+  message: string
+}> {
+  try {
+    const supabase = getSupabaseClient()
+
+    // Try to list files in the bucket
+    const { data, error } = await supabase.storage.from(bucketName).list()
+
+    if (error) {
+      // Check for specific error types
+      if (error.message.includes("does not exist")) {
+        return {
+          exists: false,
+          canRead: false,
+          canWrite: false,
+          message: "Bucket does not exist.",
+        }
+      }
+
+      if (error.message.includes("row-level security") || error.message.includes("policy")) {
+        return {
+          exists: true,
+          canRead: false,
+          canWrite: false,
+          message: "Bucket exists but you don't have permission to read it. RLS policy needs to be configured.",
+        }
+      }
+
+      return {
+        exists: false,
+        canRead: false,
+        canWrite: false,
+        message: error.message,
       }
     }
 
-    return result
-  } catch (err) {
-    console.error(`Error testing bucket ${bucket} access:`, err)
+    // Bucket exists and we can read it
+    // Now try to write to it
+    const testFile = new Blob(["test"], { type: "text/plain" })
+    const testFileName = `test-${Date.now()}.txt`
+
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from(bucketName)
+      .upload(`test/${testFileName}`, testFile, {
+        cacheControl: "3600",
+        upsert: false,
+      })
+
+    if (uploadError) {
+      // Check if it's an RLS policy issue
+      if (uploadError.message.includes("row-level security") || uploadError.message.includes("policy")) {
+        return {
+          exists: true,
+          canRead: true,
+          canWrite: false,
+          message: "You can read from this bucket but not write to it. RLS policy needs to be configured for uploads.",
+        }
+      }
+
+      return {
+        exists: true,
+        canRead: true,
+        canWrite: false,
+        message: `Can read but not write: ${uploadError.message}`,
+      }
+    }
+
+    // Clean up the test file
+    if (uploadData?.path) {
+      await supabase.storage.from(bucketName).remove([`test/${testFileName}`])
+    }
+
+    return {
+      exists: true,
+      canRead: true,
+      canWrite: true,
+      message: "Full access to bucket.",
+    }
+  } catch (error) {
+    console.error("Error testing bucket access:", error)
     return {
       exists: false,
       canRead: false,
       canWrite: false,
-      message: `Error testing bucket access: ${err instanceof Error ? err.message : String(err)}`,
+      message: error instanceof Error ? error.message : String(error),
     }
   }
 }

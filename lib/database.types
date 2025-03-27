@@ -1,0 +1,265 @@
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export interface Database {
+  public: {
+    Tables: {
+      call_notes: {
+        Row: {
+          attachments: string[] | null
+          call_date: string
+          client_name: string
+          contact_name: string | null
+          created_at: string
+          id: string
+          location_type: string | null
+          notes: string
+          submitter_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          attachments?: string[] | null
+          call_date: string
+          client_name: string
+          contact_name?: string | null
+          created_at?: string
+          id?: string
+          location_type?: string | null
+          notes: string
+          submitter_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          attachments?: string[] | null
+          call_date?: string
+          client_name?: string
+          contact_name?: string | null
+          created_at?: string
+          id?: string
+          location_type?: string | null
+          notes?: string
+          submitter_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_notes_submitter_id_fkey"
+            columns: ["submitter_id"]
+            referencedTo: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      daily_reports: {
+        Row: {
+          comments: string | null
+          created_at: string
+          id: string
+          mileage: number | null
+          report_date: string
+          submitter_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          comments?: string | null
+          created_at?: string
+          id?: string
+          mileage?: number | null
+          report_date: string
+          submitter_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          comments?: string | null
+          created_at?: string
+          id?: string
+          mileage?: number | null
+          report_date?: string
+          submitter_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_reports_submitter_id_fkey"
+            columns: ["submitter_id"]
+            referencedTo: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      expenses: {
+        Row: {
+          amount: number
+          associated_call: string | null
+          client_name: string | null
+          created_at: string
+          description: string | null
+          discussion_notes: string | null
+          expense_date: string
+          expense_type: string
+          id: string
+          location: string | null
+          receipt_url: string | null
+          submitter_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          associated_call?: string | null
+          client_name?: string | null
+          created_at?: string
+          description?: string | null
+          discussion_notes?: string | null
+          expense_date: string
+          expense_type: string
+          id?: string
+          location?: string | null
+          receipt_url?: string | null
+          submitter_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          associated_call?: string | null
+          client_name?: string | null
+          created_at?: string
+          description?: string | null
+          discussion_notes?: string | null
+          expense_date?: string
+          expense_type?: string
+          id?: string
+          location?: string | null
+          receipt_url?: string | null
+          submitter_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_submitter_id_fkey"
+            columns: ["submitter_id"]
+            referencedTo: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      opportunities: {
+        Row: {
+          company_name: string
+          contact_name: string
+          created_at: string
+          description: string | null
+          expected_close_date: string | null
+          id: string
+          name: string
+          owner_id: string
+          request_machine: string
+          requested_attachments: string | null
+          status: string
+          trade_in_description: string | null
+          updated_at: string | null
+          value: number
+        }
+        Insert: {
+          company_name: string
+          contact_name: string
+          created_at?: string
+          description?: string | null
+          expected_close_date?: string | null
+          id?: string
+          name: string
+          owner_id: string
+          request_machine: string
+          requested_attachments?: string | null
+          status: string
+          trade_in_description?: string | null
+          updated_at?: string | null
+          value: number
+        }
+        Update: {
+          company_name?: string
+          contact_name?: string
+          created_at?: string
+          description?: string | null
+          expected_close_date?: string | null
+          id?: string
+          name?: string
+          owner_id?: string
+          request_machine?: string
+          requested_attachments?: string | null
+          status?: string
+          trade_in_description?: string | null
+          updated_at?: string | null
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "opportunities_owner_id_fkey"
+            columns: ["owner_id"]
+            referencedTo: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      users: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          role: string
+          updated_at: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email: string
+          full_name: string
+          id: string
+          role: string
+          updated_at?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          role?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "users_id_fkey"
+            columns: ["id"]
+            referencedTo: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
+
+export type ExpenseInsert = Database["public"]["Tables"]["expenses"]["Insert"]
+export type ExpenseUpdate = Database["public"]["Tables"]["expenses"]["Update"]
+export type Expense = Database["public"]["Tables"]["expenses"]["Row"]
+export type ExpenseType = ExpenseInsert["expense_type"]
+

@@ -1,53 +1,35 @@
 import { createClient } from "@supabase/supabase-js"
-import type { Database } from "@/lib/database.types"
+import type { Database } from "@/types/supabase"
 
-// Create a single instance of the Supabase client
-let supabaseClient: ReturnType<typeof createClient<Database>> | null = null
+// Create a singleton Supabase client for client-side usage
+let supabaseClient: ReturnType<typeof createClient> | null = null
 
-// Use a proper singleton pattern with a global variable
 export const getSupabaseClient = () => {
-  // If we already have a client instance, return it
   if (supabaseClient) return supabaseClient
 
-  // Check if we're in a browser environment
-  if (typeof window === "undefined") {
-    // Server-side initialization
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder-url.supabase.co"
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-key"
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-    // Log warning instead of throwing error
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      console.warn("Warning: Missing Supabase environment variables. Using placeholder values.")
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error("Supabase URL or Anon Key is missing. Make sure environment variables are properly set.", {
+      url: supabaseUrl ? "defined" : "undefined",
+      key: supabaseAnonKey ? "defined" : "undefined",
+    })
+
+    // In development, provide fallback values to prevent crashes
+    // These should be removed in production
+    if (process.env.NODE_ENV === "development") {
+      supabaseClient = createClient(
+        supabaseUrl || "https://your-project.supabase.co",
+        supabaseAnonKey || "public-anon-key-placeholder",
+      )
+      return supabaseClient
     }
 
-    supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: false, // Don't persist session on server
-      },
-    })
-  } else {
-    // Client-side initialization
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder-url.supabase.co"
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-key"
-
-    // Log warning instead of throwing error
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      console.warn("Warning: Missing Supabase environment variables. Using placeholder values.")
-    }
-
-    // Create the client only once
-    supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        storageKey: "app-auth-token", // Use a consistent storage key
-      },
-    })
+    throw new Error("Supabase configuration is missing. Check your environment variables.")
   }
 
+  supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey)
   return supabaseClient
 }
-
-// Export a direct instance for components that need it
-export const supabase = getSupabaseClient()
 

@@ -1,195 +1,141 @@
 "use client"
-
-import type React from "react"
-
-import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd"
+import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { OpportunityCard } from "@/components/opportunity-card"
-import { updateOpportunityStatus } from "@/lib/services/opportunity-service"
-import { OPPORTUNITY_STAGES } from "@/components/airtable-kanban-board"
-import { OpportunityModal } from "@/components/opportunity-modal"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { formatCurrency } from "@/lib/utils"
+import { useAuth } from "@/hooks/use-auth"
+import { useUsers } from "@/hooks/use-users"
+import { useKanbanOpportunities } from "@/hooks/use-kanban-opportunities"
+import { Skeleton } from "@/components/ui/skeleton"
+import type { Opportunity } from "@/types"
 
-interface KanbanBoardProps {
-  opportunities: any[]
-  onOpportunityUpdated: () => void
-}
+// Define the status columns
+const statusColumns = ["New Lead", "Contacted", "Proposal", "Negotiation", "Won", "Lost"]
 
-export function KanbanBoard({ opportunities, onOpportunityUpdated }: KanbanBoardProps) {
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
-  const [selectedStage, setSelectedStage] = useState<string | null>(null)
+export function KanbanBoard() {
+  const { userDetails } = useAuth()
+  const { users, loading: loadingUsers } = useUsers()
+  const {
+    opportunities,
+    loading: loadingOpportunities,
+    error,
+    selectedUserId,
+    setSelectedUserId,
+    updateOpportunityStatus,
+  } = useKanbanOpportunities()
 
-  // Group opportunities by stage
-  const opportunitiesByStage = OPPORTUNITY_STAGES.reduce(
-    (acc, stage) => {
-      acc[stage.id] = opportunities.filter((opp) => opp.status === stage.id)
+  const isAdmin = userDetails?.role === "admin"
+
+  // Group opportunities by status
+  const opportunitiesByStatus: Record<string, Opportunity[]> = statusColumns.reduce(
+    (acc, status) => {
+      acc[status] = opportunities.filter((opp) => opp.status === status)
       return acc
     },
-    {} as Record<string, any[]>,
+    {} as Record<string, Opportunity[]>,
   )
 
-  // Handle drag start
-  const handleDragStart = (e: React.DragEvent, opportunity: any) => {
-    setActiveId(opportunity.id)
-    e.dataTransfer.setData("opportunityId", opportunity.id)
-  }
+  const handleDragEnd = (result: DropResult) => {
+    const { destination, source, draggableId } = result
 
-  // Handle drag over
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-  }
+    // Dropped outside a droppable area
+    if (!destination) return
 
-  // Handle drop
-  const handleDrop = async (e: React.DragEvent, newStatus: string) => {
-    e.preventDefault()
-    const opportunityId = e.dataTransfer.getData("opportunityId")
-
-    if (!opportunityId) return
-
-    const opportunity = opportunities.find((opp) => opp.id === opportunityId)
-    if (!opportunity || opportunity.status === newStatus) {
-      setActiveId(null)
+    // Dropped in the same place
+    if (destination.droppableId === source.droppableId && destination.index === source.index) {
       return
     }
 
-    try {
-      await updateOpportunityStatus(opportunityId, newStatus)
-      onOpportunityUpdated()
-    } catch (error) {
-      console.error("Error updating status:", error)
-    } finally {
-      setActiveId(null)
-    }
+    // Update opportunity status
+    updateOpportunityStatus(draggableId, destination.droppableId)
   }
 
-  // Handle drag end
-  const handleDragEnd = () => {
-    setActiveId(null)
-  }
-
-  // Get color classes based on stage ID
-  const getStageColorClasses = (stageId: string) => {
-    switch (stageId) {
-      case "new":
-        return {
-          header: "bg-blue-100 border-b border-blue-200",
-          content: "bg-blue-50/50",
-          text: "text-blue-800",
-          badge: "bg-blue-100 text-blue-800 border-blue-200",
-        }
-      case "quoted":
-        return {
-          header: "bg-purple-100 border-b border-purple-200",
-          content: "bg-purple-50/50",
-          text: "text-purple-800",
-          badge: "bg-purple-100 text-purple-800 border-purple-200",
-        }
-      case "waiting_on_trade_eval":
-        return {
-          header: "bg-amber-100 border-b border-amber-200",
-          content: "bg-amber-50/50",
-          text: "text-amber-800",
-          badge: "bg-amber-100 text-amber-800 border-amber-200",
-        }
-      case "accepted":
-        return {
-          header: "bg-teal-100 border-b border-teal-200",
-          content: "bg-teal-50/50",
-          text: "text-teal-800",
-          badge: "bg-teal-100 text-teal-800 border-teal-200",
-        }
-      case "rpo":
-        return {
-          header: "bg-indigo-100 border-b border-indigo-200",
-          content: "bg-indigo-50/50",
-          text: "text-indigo-800",
-          badge: "bg-indigo-100 text-indigo-800 border-indigo-200",
-        }
-      case "ready_to_bill":
-        return {
-          header: "bg-green-100 border-b border-green-200",
-          content: "bg-green-50/50",
-          text: "text-green-800",
-          badge: "bg-green-100 text-green-800 border-green-200",
-        }
-      case "lost_deal":
-        return {
-          header: "bg-red-100 border-b border-red-200",
-          content: "bg-red-50/50",
-          text: "text-red-800",
-          badge: "bg-red-100 text-red-800 border-red-200",
-        }
-      default:
-        return {
-          header: "",
-          content: "",
-          text: "",
-          badge: "",
-        }
-    }
+  if (error) {
+    return <div className="p-4 bg-red-50 text-red-500 rounded-md">Error loading opportunities: {error.message}</div>
   }
 
   return (
-    <>
-      {/* Adjusted grid layout with fewer columns on larger screens and more spacing */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 w-full max-w-[2000px] mx-auto px-4">
-        {OPPORTUNITY_STAGES.map((stage) => (
-          <div key={stage.id} className="flex flex-col">
-            <Card className="h-full overflow-hidden border shadow-sm w-full min-w-[280px]">
-              <CardHeader className={`py-3 px-4 ${getStageColorClasses(stage.id).header}`}>
-                <div className="flex items-center justify-between">
-                  <CardTitle className={`text-sm font-medium ${getStageColorClasses(stage.id).text}`}>
-                    {stage.name}
-                  </CardTitle>
-                  <Badge variant="outline" className={getStageColorClasses(stage.id).badge}>
-                    {opportunitiesByStage[stage.id]?.length || 0}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent
-                className={`flex-1 overflow-y-auto p-3 ${getStageColorClasses(stage.id).content} min-h-[70vh]`}
-                onDragOver={handleDragOver}
-                onDrop={(e) => handleDrop(e, stage.id)}
-              >
-                <div className="space-y-3">
-                  {opportunitiesByStage[stage.id]?.map((opportunity) => (
-                    <div
-                      key={opportunity.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, opportunity)}
-                      onDragEnd={handleDragEnd}
-                      className="w-full"
-                    >
-                      <OpportunityCard
-                        opportunity={opportunity}
-                        isActive={activeId === opportunity.id}
-                        onOpportunityUpdated={onOpportunityUpdated}
-                        stageId={stage.id}
-                      />
-                    </div>
-                  ))}
-                  {opportunitiesByStage[stage.id]?.length === 0 && (
-                    <div className="flex items-center justify-center h-20 text-sm text-gray-500">No opportunities</div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        ))}
-      </div>
+    <div className="space-y-6">
+      {isAdmin && (
+        <div className="flex items-center space-x-2">
+          <span className="text-sm font-medium">View:</span>
+          <Select
+            value={selectedUserId || "everyone"}
+            onValueChange={(value) => setSelectedUserId(value === "everyone" ? null : value)}
+          >
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Everyone" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="everyone">Everyone</SelectItem>
+              {loadingUsers ? (
+                <SelectItem value="loading" disabled>
+                  Loading users...
+                </SelectItem>
+              ) : (
+                users.map((user) => (
+                  <SelectItem key={user.id} value={user.id}>
+                    {user.email}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
-      {/* Modal for adding a new opportunity to a specific stage */}
-      <OpportunityModal
-        isOpen={isAddModalOpen}
-        onClose={() => {
-          setIsAddModalOpen(false)
-          setSelectedStage(null)
-        }}
-        onSuccess={onOpportunityUpdated}
-        initialStatus={selectedStage || undefined}
-      />
-    </>
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+          {statusColumns.map((status) => (
+            <div key={status} className="space-y-2">
+              <div className="flex justify-between items-center">
+                <h3 className="font-medium">{status}</h3>
+                <Badge variant="outline">{opportunitiesByStatus[status]?.length || 0}</Badge>
+              </div>
+              <Droppable droppableId={status}>
+                {(provided) => (
+                  <div
+                    ref={provided.innerRef}
+                    {...provided.droppableProps}
+                    className="bg-gray-50 rounded-md p-2 min-h-[500px]"
+                  >
+                    {loadingOpportunities ? (
+                      <div className="space-y-2">
+                        <Skeleton className="h-24 w-full" />
+                        <Skeleton className="h-24 w-full" />
+                      </div>
+                    ) : (
+                      opportunitiesByStatus[status]?.map((opp, index) => (
+                        <Draggable key={opp.id} draggableId={opp.id} index={index}>
+                          {(provided) => (
+                            <Card
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              className="mb-2 cursor-grab active:cursor-grabbing"
+                            >
+                              <CardContent className="p-3 space-y-2">
+                                <div className="font-medium truncate">{opp.company_name}</div>
+                                <div className="text-sm text-muted-foreground truncate">{opp.contact_name}</div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm font-medium">{formatCurrency(opp.value || 0)}</span>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )}
+                        </Draggable>
+                      ))
+                    )}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </div>
+          ))}
+        </div>
+      </DragDropContext>
+    </div>
   )
 }
 

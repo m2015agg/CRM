@@ -1,114 +1,69 @@
-"use client"
-
-import type React from "react"
-
-import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { formatCurrency } from "@/lib/utils"
-import { CalendarIcon, DollarSign, Building, User, Truck, Pencil } from "lucide-react"
-import { format, parseISO } from "date-fns"
-import { Button } from "@/components/ui/button"
-import { OpportunityModal } from "@/components/opportunity-modal"
+import { formatDistanceToNow } from "date-fns"
 
 interface OpportunityCardProps {
-  opportunity: any
-  isActive: boolean
-  onOpportunityUpdated: () => void
-  stageId?: string
+  opportunity: {
+    id: string
+    company_name: string
+    contact_name: string
+    value: number
+    status: string
+    updated_at: string
+    created_at?: string
+  }
+  isDragging?: boolean
 }
 
-export function OpportunityCard({ opportunity, isActive, onOpportunityUpdated, stageId }: OpportunityCardProps) {
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+export function OpportunityCard({ opportunity, isDragging }: OpportunityCardProps) {
+  const formattedDate = opportunity.updated_at
+    ? formatDistanceToNow(new Date(opportunity.updated_at), { addSuffix: true })
+    : "Unknown date"
 
-  // Format the expected close date
-  const closeDate = opportunity.expected_close_date
-    ? format(parseISO(opportunity.expected_close_date), "MMM d, yyyy")
-    : "No date"
-
-  const handleEditClick = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    e.preventDefault()
-    setIsEditModalOpen(true)
-  }
-
-  // Get card border class based on stage ID
-  const getCardBorderClass = (stageId: string) => {
-    switch (stageId) {
+  // Status-based color mapping
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
       case "new":
-        return "border-l-4 border-l-blue-400"
+        return "bg-blue-50 border-blue-200"
       case "quoted":
-        return "border-l-4 border-l-purple-400"
-      case "waiting_on_trade_eval":
-        return "border-l-4 border-l-amber-400"
+        return "bg-amber-50 border-amber-200"
       case "accepted":
-        return "border-l-4 border-l-teal-400"
-      case "rpo":
-        return "border-l-4 border-l-indigo-400"
-      case "ready_to_bill":
-        return "border-l-4 border-l-green-400"
+        return "bg-green-50 border-green-200"
       case "lost_deal":
-        return "border-l-4 border-l-red-400"
+        return "bg-red-50 border-red-200"
       default:
-        return ""
+        return "bg-gray-50 border-gray-200"
     }
   }
 
+  // Value badge color based on amount
+  const getValueColor = (value: number) => {
+    if (value >= 10000) return "bg-green-100 text-green-800 hover:bg-green-200"
+    if (value >= 5000) return "bg-blue-100 text-blue-800 hover:bg-blue-200"
+    return "bg-gray-100 text-gray-800 hover:bg-gray-200"
+  }
+
+  const statusColor = getStatusColor(opportunity.status)
+  const valueColor = getValueColor(opportunity.value || 0)
+
   return (
-    <>
-      <Card
-        className={`${isActive ? "border-primary shadow-md" : "shadow-sm"} cursor-move relative ${
-          stageId ? getCardBorderClass(stageId) : ""
-        } hover:shadow bg-white w-full`}
-      >
-        <CardContent className="p-4 space-y-3 pb-12">
-          <div className="font-medium text-sm">{opportunity.name}</div>
+    <Card className={`mb-3 border-2 shadow-sm ${statusColor} ${isDragging ? "shadow-md ring-2 ring-primary/20" : ""}`}>
+      <CardContent className="p-3 space-y-2">
+        <div className="flex justify-between items-start">
+          <h4 className="font-medium text-sm truncate">{opportunity.company_name}</h4>
+          <Badge variant="secondary" className={`ml-2 shrink-0 ${valueColor}`}>
+            {formatCurrency(opportunity.value || 0)}
+          </Badge>
+        </div>
 
-          <div className="flex items-center text-xs text-muted-foreground">
-            <Building className="h-3 w-3 mr-1.5 flex-shrink-0" />
-            <span className="line-clamp-1">{opportunity.company_name}</span>
-          </div>
+        <div className="text-xs text-muted-foreground truncate">{opportunity.contact_name || "No contact"}</div>
 
-          <div className="flex items-center text-xs text-muted-foreground">
-            <User className="h-3 w-3 mr-1.5 flex-shrink-0" />
-            <span className="line-clamp-1">{opportunity.contact_name}</span>
-          </div>
-
-          {opportunity.request_machine && (
-            <div className="flex items-center text-xs text-muted-foreground">
-              <Truck className="h-3 w-3 mr-1.5 flex-shrink-0" />
-              <span className="line-clamp-1">{opportunity.request_machine}</span>
-            </div>
-          )}
-
-          <div className="flex justify-between items-center">
-            <div className="flex items-center text-xs">
-              <CalendarIcon className="h-3 w-3 mr-1.5 flex-shrink-0 text-muted-foreground" />
-              <span>{closeDate}</span>
-            </div>
-
-            <Badge className="text-xs" variant="outline">
-              <DollarSign className="h-3 w-3 mr-1 flex-shrink-0" />
-              {formatCurrency(opportunity.value)}
-            </Badge>
-          </div>
-
-          <div className="absolute bottom-2 right-2">
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={handleEditClick}>
-              <Pencil className="h-4 w-4" />
-              <span className="sr-only">Edit</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <OpportunityModal
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        onSuccess={onOpportunityUpdated}
-        opportunity={opportunity}
-      />
-    </>
+        <div className="flex justify-between items-center text-xs text-muted-foreground pt-1 border-t border-border/50">
+          <span>Updated {formattedDate}</span>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 

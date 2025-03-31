@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/auth-context"
 import { useRouter, usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { LogOut, User, Settings, Database, BarChart, Briefcase } from "lucide-react"
+import { LogOut, User, Settings, Database, BarChart, Briefcase, ClipboardList, LayoutDashboard } from "lucide-react"
 import Link from "next/link"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -80,6 +80,49 @@ export default function DashboardLayout({
   const avatarUrl = user?.avatar_url || ""
   const isAdmin = user?.role === "admin"
 
+  // Define navigation items based on user role
+  const navItems = isAdmin
+    ? [
+        {
+          href: "/dashboard/admin",
+          label: "Dashboard",
+          icon: <LayoutDashboard className="mr-2 h-4 w-4" />,
+          active: pathname === "/dashboard/admin",
+        },
+        {
+          href: "/dashboard/admin/opportunities",
+          label: "Team Opportunities",
+          icon: <BarChart className="mr-2 h-4 w-4" />,
+          active: pathname.includes("/opportunities"),
+        },
+        {
+          href: "/dashboard/admin/call-logs",
+          label: "Team Call Logs",
+          icon: <ClipboardList className="mr-2 h-4 w-4" />,
+          active: pathname.includes("/call-logs"),
+        },
+        {
+          href: "/dashboard/admin/console",
+          label: "Administrator Console",
+          icon: <Settings className="mr-2 h-4 w-4" />,
+          active: pathname.includes("/console"),
+        },
+      ]
+    : [
+        {
+          href: "/dashboard/submitter",
+          label: "Weekly Overview",
+          icon: <BarChart className="mr-2 h-4 w-4" />,
+          active: pathname === "/dashboard/submitter",
+        },
+        {
+          href: "/dashboard/submitter/opportunities",
+          label: "Opportunities",
+          icon: <Briefcase className="mr-2 h-4 w-4" />,
+          active: pathname.includes("/opportunities"),
+        },
+      ]
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-10 border-b bg-background">
@@ -88,29 +131,21 @@ export default function DashboardLayout({
             <h1 className="text-xl font-semibold">{isAdmin ? "Admin Dashboard" : "EQUIPCRM"}</h1>
           </div>
           <div className="flex items-center gap-4">
-            <nav className="hidden md:flex items-center space-x-4 mr-4">
-              <Link
-                href="/dashboard/submitter"
-                className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${
-                  pathname === "/dashboard/submitter"
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:text-primary hover:bg-primary/5"
-                }`}
-              >
-                <BarChart className="mr-2 h-4 w-4" />
-                Weekly Overview
-              </Link>
-              <Link
-                href="/dashboard/submitter/opportunities"
-                className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${
-                  pathname.includes("/opportunities")
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:text-primary hover:bg-primary/5"
-                }`}
-              >
-                <Briefcase className="mr-2 h-4 w-4" />
-                Opportunities
-              </Link>
+            <nav className="hidden md:flex items-center space-x-1">
+              {navItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${
+                    item.active
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:text-primary hover:bg-primary/5"
+                  }`}
+                >
+                  {item.icon}
+                  {item.label}
+                </Link>
+              ))}
             </nav>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -128,7 +163,7 @@ export default function DashboardLayout({
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                   <Link href="/profile">
-                    <Settings className="mr-2 h-4 w-4" />
+                    <User className="mr-2 h-4 w-4" />
                     <span>Profile</span>
                   </Link>
                 </DropdownMenuItem>

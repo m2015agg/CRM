@@ -4,35 +4,24 @@ import { useEffect, useState } from "react"
 import { useAuth } from "@/contexts/auth-context"
 import { useRouter } from "next/navigation"
 import { getSupabaseClient } from "@/lib/supabase/client"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { formatDistanceToNow } from "date-fns"
-import type { Database } from "@/lib/database.types"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, Paperclip } from "lucide-react"
-import { FilePreview } from "@/components/file-preview"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-
-type CallNote = Database["public"]["Tables"]["call_notes"]["Row"] & {
-  users: {
-    full_name: string
-    email: string
-  }
-}
-
-// Define the bucket name as a constant to ensure consistency
-const ATTACHMENTS_BUCKET = "attachments"
-
-// Get a reference to the Supabase client
-const supabase = getSupabaseClient()
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AlertCircle, BarChart3, Users, ClipboardList, Settings, ArrowRight } from "lucide-react"
+import Link from "next/link"
 
 export default function AdminDashboardPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
-  const [callNotes, setCallNotes] = useState<CallNote[]>([])
-  const [isLoadingNotes, setIsLoadingNotes] = useState(true)
+  const [stats, setStats] = useState({
+    totalSubmitters: 0,
+    totalOpportunities: 0,
+    totalCallNotes: 0,
+    recentCallNotes: 0,
+  })
+  const [isLoadingStats, setIsLoadingStats] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [expandedAttachments, setExpandedAttachments] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     // Check if user is admin, if not redirect
@@ -53,48 +42,65 @@ export default function AdminDashboardPage() {
   }, [user, isLoading, router])
 
   useEffect(() => {
-    const fetchCallNotes = async () => {
+    const fetchStats = async () => {
       if (isLoading || !user || user.role !== "admin") return
 
       try {
-        console.log("Fetching call notes for admin")
-        setIsLoadingNotes(true)
+        setIsLoadingStats(true)
+        const supabase = getSupabaseClient()
 
-        const { data, error } = await supabase
+        // Get count of submitters
+        const { count: submitterCount, error: submitterError } = await supabase
+          .from("users")
+          .select("*", { count: "exact", head: true })
+          .eq("role", "submitter")
+
+        if (submitterError) throw submitterError
+
+        // Get count of opportunities
+        const { count: opportunityCount, error: opportunityError } = await supabase
+          .from("opportunities")
+          .select("*", { count: "exact", head: true })
+
+        if (opportunityError) throw opportunityError
+
+        // Get count of all call notes
+        const { count: callNoteCount, error: callNoteError } = await supabase
           .from("call_notes")
-          .select(`
-            *,
-            users:submitter_id(full_name, email)
-          `)
-          .order("call_date", { ascending: false })
+          .select("*", { count: "exact", head: true })
 
-        if (error) {
-          console.error("Error fetching call notes:", error)
-          setError(`Failed to fetch call notes: ${error.message}`)
-          return
-        }
+        if (callNoteError) throw callNoteError
 
-        console.log("Call notes fetched:", data?.length || 0)
-        setCallNotes(data as CallNote[])
+        // Get count of recent call notes (last 7 days)
+        const sevenDaysAgo = new Date()
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+        const formattedDate = sevenDaysAgo.toISOString().split("T")[0]
+
+        const { count: recentCallNoteCount, error: recentCallNoteError } = await supabase
+          .from("call_notes")
+          .select("*", { count: "exact", head: true })
+          .gte("call_date", formattedDate)
+
+        if (recentCallNoteError) throw recentCallNoteError
+
+        setStats({
+          totalSubmitters: submitterCount || 0,
+          totalOpportunities: opportunityCount || 0,
+          totalCallNotes: callNoteCount || 0,
+          recentCallNotes: recentCallNoteCount || 0,
+        })
       } catch (err) {
-        console.error("Unexpected error fetching call notes:", err)
-        setError(`An unexpected error occurred: ${err instanceof Error ? err.message : String(err)}`)
+        console.error("Error fetching admin stats:", err)
+        setError(err instanceof Error ? err.message : "An unexpected error occurred")
       } finally {
-        setIsLoadingNotes(false)
+        setIsLoadingStats(false)
       }
     }
 
-    fetchCallNotes()
+    fetchStats()
   }, [user, isLoading])
 
-  const toggleAttachments = (noteId: string) => {
-    setExpandedAttachments((prev) => ({
-      ...prev,
-      [noteId]: !prev[noteId],
-    }))
-  }
-
-  if (isLoading || isLoadingNotes) {
+  if (isLoading || isLoadingStats) {
     return (
       <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-gray-900"></div>
@@ -111,89 +117,152 @@ export default function AdminDashboardPage() {
     )
   }
 
-  // Group notes by submitter
-  const submitterMap = new Map<string, { name: string; notes: CallNote[] }>()
-
-  callNotes.forEach((note) => {
-    const submitterId = note.submitter_id
-    if (!submitterMap.has(submitterId)) {
-      submitterMap.set(submitterId, {
-        name: note.users?.full_name || "Unknown User",
-        notes: [],
-      })
-    }
-    submitterMap.get(submitterId)?.notes.push(note)
-  })
-
-  const submitters = Array.from(submitterMap.entries())
-
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Admin Dashboard</h2>
-        <p className="text-muted-foreground">View all call notes submitted by your team.</p>
+      <div className="flex flex-col space-y-2">
+        <h1 className="text-3xl font-bold tracking-tight">Welcome, {user?.full_name || "Admin"}</h1>
+        <p className="text-muted-foreground">
+          Manage your team's activities, view reports, and access administrative tools.
+        </p>
       </div>
 
-      {submitters.length === 0 ? (
+      {/* Stats Overview */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
-          <CardContent className="pt-6">
-            <p className="text-center text-muted-foreground">No call notes found.</p>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Team Members</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalSubmitters}</div>
+            <p className="text-xs text-muted-foreground">Active submitters</p>
           </CardContent>
         </Card>
-      ) : (
-        <Tabs defaultValue={submitters[0][0]}>
-          <TabsList className="mb-4">
-            {submitters.map(([id, { name }]) => (
-              <TabsTrigger key={id} value={id}>
-                {name}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Opportunities</CardTitle>
+            <BarChart3 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalOpportunities}</div>
+            <p className="text-xs text-muted-foreground">Total sales opportunities</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Call Notes</CardTitle>
+            <ClipboardList className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalCallNotes}</div>
+            <p className="text-xs text-muted-foreground">Total customer interactions</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Recent Activity</CardTitle>
+            <ClipboardList className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.recentCallNotes}</div>
+            <p className="text-xs text-muted-foreground">Call notes in the last 7 days</p>
+          </CardContent>
+        </Card>
+      </div>
 
-          {submitters.map(([id, { notes }]) => (
-            <TabsContent key={id} value={id} className="space-y-4">
-              {notes.map((note) => (
-                <Card key={note.id}>
-                  <CardHeader>
-                    <CardTitle>{note.client_name}</CardTitle>
-                    <CardDescription>
-                      {formatDistanceToNow(new Date(note.call_date), { addSuffix: true })}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="whitespace-pre-wrap">{note.notes}</p>
-                  </CardContent>
-                  {note.attachments && note.attachments.length > 0 && (
-                    <CardFooter className="flex flex-col items-start">
-                      <Button variant="ghost" size="sm" className="mb-2" onClick={() => toggleAttachments(note.id)}>
-                        <Paperclip className="mr-2 h-4 w-4" />
-                        {note.attachments.length} Attachment{note.attachments.length !== 1 ? "s" : ""}
-                      </Button>
+      {/* Main Navigation Cards */}
+      <div className="grid gap-6 md:grid-cols-3">
+        <Card className="md:col-span-1">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Team Opportunities
+            </CardTitle>
+            <CardDescription>View and manage sales opportunities across your team</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Track the status of all sales opportunities, monitor progress, and identify potential deals.
+            </p>
+          </CardContent>
+          <CardFooter>
+            <Button asChild className="w-full">
+              <Link href="/dashboard/admin/opportunities">
+                View Opportunities
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </CardFooter>
+        </Card>
 
-                      {expandedAttachments[note.id] && (
-                        <div className="w-full space-y-4">
-                          <h4 className="text-sm font-medium">Attachments</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {note.attachments.map((url, index) => (
-                              <FilePreview
-                                key={index}
-                                url={url}
-                                bucket={ATTACHMENTS_BUCKET}
-                                showDelete={false}
-                                className="max-w-full"
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </CardFooter>
-                  )}
-                </Card>
-              ))}
+        <Card className="md:col-span-1">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardList className="h-5 w-5" />
+              Team Call Logs
+            </CardTitle>
+            <CardDescription>Review customer interactions and call notes</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Access detailed call logs, review customer interactions, and monitor team activity.
+            </p>
+          </CardContent>
+          <CardFooter>
+            <Button asChild className="w-full">
+              <Link href="/dashboard/admin/call-logs">
+                View Call Logs
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </CardFooter>
+        </Card>
+
+        <Card className="md:col-span-1">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Administrator Console
+            </CardTitle>
+            <CardDescription>Manage users, settings, and system configuration</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Add or remove users, configure system settings, and manage application preferences.
+            </p>
+          </CardContent>
+          <CardFooter>
+            <Button asChild className="w-full">
+              <Link href="/dashboard/admin/console">
+                Open Console
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+
+      {/* Recent Activity */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Activity</CardTitle>
+          <CardDescription>The latest updates from your team</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="calls">
+            <TabsList>
+              <TabsTrigger value="calls">Recent Calls</TabsTrigger>
+              <TabsTrigger value="opportunities">New Opportunities</TabsTrigger>
+            </TabsList>
+            <TabsContent value="calls" className="space-y-4 mt-4">
+              <p className="text-center text-muted-foreground py-8">Recent call activity will be displayed here.</p>
             </TabsContent>
-          ))}
-        </Tabs>
-      )}
+            <TabsContent value="opportunities" className="space-y-4 mt-4">
+              <p className="text-center text-muted-foreground py-8">New opportunities will be displayed here.</p>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
     </div>
   )
 }

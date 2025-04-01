@@ -31,7 +31,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 const USER_CACHE_KEY = "auth:user-cache"
 const SESSION_CACHE_KEY = "auth:session-cache"
 const CACHE_EXPIRY_KEY = "auth:cache-expiry"
-const CACHE_DURATION = 24 * 60 * 60 * 1000 // 24 hours
+const CACHE_DURATION = (4 * 60 * 60 * 1000) - (2 * 60 * 60 * 1000) // 2 hours before session expiry (default session is 4 hours)
 
 // Helper to save user data to local storage
 const cacheUserData = (user: UserWithRole | null, session: Session | null) => {
@@ -99,9 +99,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsLoading(true)
 
         // Check for cached data first
+        // Retrieve cached user data from localStorage if available
+        // This helps improve performance by avoiding unnecessary API calls
         const { user: cachedUser, session: cachedSession } = getCachedUserData()
+        
+        // Add session expiration check with detailed comments
+        if (cachedSession?.expires_at) {
+          // Convert current time to Unix timestamp (seconds) to match Supabase's format
+          const now = Math.floor(Date.now() / 1000)
+          
+          // Check if the session has expired
+          if (now >= cachedSession.expires_at) {
+            console.log("Auth context: Cached session has expired")
+            // Clear all cached data since it's no longer valid
+            cacheUserData(null, null)
+            // Reset user state
+            setUser(null)
+            // Reset session state
+            setSession(null)
+            // Redirect to login page
+            router.push('/login')
+            // Stop loading state
+            setIsLoading(false)
+            return
+          }
+          
+          // Log remaining session time for debugging
+          const remainingMinutes = Math.floor((cachedSession.expires_at - now) / 60)
+          console.log(`Auth context: Session expires in ${remainingMinutes} minutes`)
+        }
+
+        // Only use cached data if:
+        // 1. We have both user and session data
+        // 2. The component is still mounted (prevents memory leaks)
         if (cachedUser && cachedSession && isMounted) {
           console.log("Auth context: Using cached user data")
+          // Update state with cached data for immediate UI updates
           setUser(cachedUser)
           setSession(cachedSession)
           // Don't set isLoading to false yet - we'll still verify with the server

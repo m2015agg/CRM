@@ -570,10 +570,10 @@ export function DailyCallReportForm({
                   <table className="w-full border-collapse">
                     <thead>
                       <tr className="border-b">
-                        <th className="text-left py-2 px-1 font-medium text-sm">Customer Name</th>
-                        <th className="text-left py-2 px-1 font-medium text-sm">Contact</th>
-                        <th className="text-left py-2 px-1 font-medium text-sm">Loc. Type</th>
-                        <th className="text-left py-2 px-1 font-medium text-sm">Comments</th>
+                        <th className="text-left py-2 px-1 font-medium text-sm">Client Name</th>
+                        <th className="text-left py-2 px-1 font-medium text-sm">Contact Name</th>
+                        <th className="text-left py-2 px-1 font-medium text-sm">Location Type</th>
+                        <th className="text-left py-2 px-1 font-medium text-sm">Notes</th>
                         <th className="w-10"></th>
                       </tr>
                     </thead>
@@ -589,7 +589,7 @@ export function DailyCallReportForm({
                               render={({ field }) => (
                                 <FormItem className="m-0 space-y-0">
                                   <FormControl>
-                                    <Input placeholder="Client name" {...field} className="h-9" />
+                                    <Input placeholder="Client Name" {...field} className="h-9" />
                                   </FormControl>
                                   <FormMessage className="text-xs" />
                                 </FormItem>
@@ -603,7 +603,7 @@ export function DailyCallReportForm({
                               render={({ field }) => (
                                 <FormItem className="m-0 space-y-0">
                                   <FormControl>
-                                    <Input placeholder="Contact" {...field} className="h-9" />
+                                    <Input placeholder="Contact Name" {...field} className="h-9" />
                                   </FormControl>
                                   <FormMessage className="text-xs" />
                                 </FormItem>
@@ -617,7 +617,7 @@ export function DailyCallReportForm({
                               render={({ field }) => (
                                 <FormItem className="m-0 space-y-0">
                                   <FormControl>
-                                    <Input placeholder="Loc. Type" {...field} className="h-9" />
+                                    <Input placeholder="Location Type" {...field} className="h-9" />
                                   </FormControl>
                                   <FormMessage className="text-xs" />
                                 </FormItem>
@@ -631,7 +631,7 @@ export function DailyCallReportForm({
                               render={({ field }) => (
                                 <FormItem className="m-0 space-y-0">
                                   <FormControl>
-                                    <Input placeholder="Comments" {...field} className="h-9" />
+                                    <Input placeholder="Notes" {...field} className="h-9" />
                                   </FormControl>
                                   <FormMessage className="text-xs" />
                                 </FormItem>
@@ -655,6 +655,14 @@ export function DailyCallReportForm({
                     </tbody>
                   </table>
                 </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => appendCall({ clientName: "", contactName: "", locationType: "", notes: "" })}
+                >
+                  Add Call
+                </Button>
               </TabsContent>
 
               <TabsContent value="expenses" className="space-y-4 mt-4">
@@ -777,6 +785,20 @@ export function DailyCallReportForm({
                     </tbody>
                   </table>
                 </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => appendExpense({ 
+                    expenseType: "", 
+                    amount: 0, 
+                    description: "", 
+                    associatedCall: "", 
+                    receiptUrl: "" 
+                  })}
+                >
+                  Add Expense
+                </Button>
               </TabsContent>
             </Tabs>
           </CardContent>

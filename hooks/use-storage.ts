@@ -6,10 +6,10 @@ import { supabase } from "@/lib/supabase/client"
 
 export function useStorage() {
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
 
   // Generic wrapper for service methods
-  const executeOperation = useCallback(async (operation, errorMessage) => {
+  const executeOperation = useCallback(async (operation: () => Promise<any>, errorMessage: string, args?: any) => {
     setIsLoading(true)
     setError(null)
 
@@ -30,45 +30,46 @@ export function useStorage() {
 
   // Daily Report operations
   const createDailyReport = useCallback(
-    (data) => {
-      return executeOperation(() => dailyReportService.create(data), "Failed to create daily report")
+    (data: any) => {
+      return executeOperation(() => dailyReportService.create(data), "Failed to create daily report", data)
     },
     [executeOperation],
   )
 
   const getDailyReportByDate = useCallback(
-    (date, userId) => {
-      return executeOperation(() => dailyReportService.getByDate(date, userId), "Failed to get daily report")
+    (date: string, userId: string) => {
+      return executeOperation(() => dailyReportService.getByDate(date, userId), "Failed to get daily report", { date, userId })
     },
     [executeOperation],
   )
 
   const getAllDailyReports = useCallback(
-    (options) => {
-      return executeOperation(() => dailyReportService.getAll(options), "Failed to get daily reports")
+    (options: any) => {
+      return executeOperation(() => dailyReportService.getAll(options), "Failed to get daily reports", options)
     },
     [executeOperation],
   )
 
   const updateDailyReport = useCallback(
-    (id, data) => {
-      return executeOperation(() => dailyReportService.update(id, data), "Failed to update daily report")
+    (id: string, data: any) => {
+      return executeOperation(() => dailyReportService.update(id, data), "Failed to update daily report", { id, data })
     },
     [executeOperation],
   )
 
   const deleteDailyReport = useCallback(
-    (id) => {
-      return executeOperation(() => dailyReportService.delete(id), "Failed to delete daily report")
+    (id: string) => {
+      return executeOperation(() => dailyReportService.delete(id), "Failed to delete daily report", id)
     },
     [executeOperation],
   )
 
   const cleanupDuplicateDailyReports = useCallback(
-    (date, userId) => {
+    (date: string, userId: string) => {
       return executeOperation(
         () => dailyReportService.cleanupDuplicates(date, userId),
         "Failed to cleanup duplicate reports",
+        { date, userId }
       )
     },
     [executeOperation],
@@ -76,66 +77,72 @@ export function useStorage() {
 
   // Call Note operations
   const createCallNote = useCallback(
-    (data) => {
-      return executeOperation(() => callNoteService.create(data), "Failed to create call note")
+    (data: any) => {
+      return executeOperation(() => callNoteService.create(data), "Failed to create call note", data)
     },
     [executeOperation],
   )
 
   const getCallNoteById = useCallback(
-    (id) => {
-      return executeOperation(() => callNoteService.getById(id), "Failed to get call note")
+    (id: string) => {
+      return executeOperation(() => callNoteService.getById(id), "Failed to get call note", id)
     },
     [executeOperation],
   )
 
   const getAllCallNotes = useCallback(
-    (options) => {
-      return executeOperation(() => callNoteService.getAll(options), "Failed to get call notes")
+    (options: { startDate?: string; endDate?: string; userId?: string; daily_reports_uuid?: string }) => {
+      console.log("Fetching call notes with parameters:", {
+        startDate: options.startDate,
+        endDate: options.endDate,
+        userId: options.userId,
+        daily_reports_uuid: options.daily_reports_uuid,
+      })
+      return executeOperation(() => callNoteService.getAll(options), "Failed to get call notes", options)
     },
     [executeOperation],
   )
 
   const updateCallNote = useCallback(
-    (id, data) => {
-      return executeOperation(() => callNoteService.update(id, data), "Failed to update call note")
+    (id: string, data: any) => {
+      return executeOperation(() => callNoteService.update(id, data), "Failed to update call note", { id, data })
     },
     [executeOperation],
   )
 
   const deleteCallNote = useCallback(
-    (id) => {
-      return executeOperation(() => callNoteService.delete(id), "Failed to delete call note")
+    (id: string) => {
+      return executeOperation(() => callNoteService.delete(id), "Failed to delete call note", id)
     },
     [executeOperation],
   )
 
   const addCallNoteAttachment = useCallback(
-    (id, attachmentUrl) => {
-      return executeOperation(() => callNoteService.addAttachment(id, attachmentUrl), "Failed to add attachment")
+    (id: string, attachmentUrl: string) => {
+      return executeOperation(() => callNoteService.addAttachment(id, attachmentUrl), "Failed to add attachment", { id, attachmentUrl })
     },
     [executeOperation],
   )
 
   const removeCallNoteAttachment = useCallback(
-    (id, attachmentUrl) => {
-      return executeOperation(() => callNoteService.removeAttachment(id, attachmentUrl), "Failed to remove attachment")
+    (id: string, attachmentUrl: string) => {
+      return executeOperation(() => callNoteService.removeAttachment(id, attachmentUrl), "Failed to remove attachment", { id, attachmentUrl })
     },
     [executeOperation],
   )
 
   // Expense operations
   const createExpense = useCallback(
-    (data) => {
+    (data: any) => {
       console.log("Creating expense with data:", data)
-      return executeOperation(() => expenseService.create(data), "Failed to create expense")
+      return executeOperation(() => expenseService.create(data), "Failed to create expense", data)
     },
     [executeOperation],
   )
 
   const getExpenseById = useCallback(
-    (id) => {
-      return executeOperation(() => expenseService.getById(id), "Failed to get expense")
+    (id: string) => {
+      return executeOperation(() => expenseService.getById(id), "Failed to get expense", id)
     },
     [executeOperation],
   )
@@ -143,108 +150,95 @@ export function useStorage() {
   interface DateRangeParams {
     startDate: string
     endDate: string
+    userId?: string
+    daily_reports_uuid?: string
   }
 
   const getAllExpenses = useCallback(
-    async ({ startDate, endDate }: DateRangeParams) => {
-      setIsLoading(true)
-      setError(null)
-      try {
-        console.log(`Fetching expenses from ${startDate} to ${endDate}`)
-
-        // Use the singleton instance directly
-        const { data, error } = await supabase
-          .from("expenses")
-          .select("*")
-          .gte("expense_date", startDate)
-          .lte("expense_date", endDate)
-          .order("created_at", { ascending: false })
-
-        if (error) {
-          console.error("Error fetching expenses:", error)
-          setError(error.message)
-          return []
-        }
-
-        console.log(`Found ${data.length} expenses`)
-
-        // Log receipt URLs for debugging
-        data.forEach((expense) => {
-          if (expense.receipt_url) {
-            console.log(`Expense ${expense.id} has receipt URL: ${expense.receipt_url}`)
-          }
-        })
-
-        return data
-      } catch (err) {
-        console.error("Error in getAllExpenses:", err)
-        setError(err instanceof Error ? err.message : "An unknown error occurred")
-        return []
-      } finally {
-        setIsLoading(false)
-      }
+    (options: { startDate?: string; endDate?: string; userId?: string; daily_reports_uuid?: string }) => {
+      return executeOperation(
+        ((): Promise<any> => {
+          console.log(`Fetching expenses with parameters:`, options)
+          return Promise.resolve(
+            supabase
+              .from("expenses")
+              .select("*")
+              .eq("daily_reports_uuid", options.daily_reports_uuid)
+              .order("created_at", { ascending: false })
+              .then(({ data, error }) => {
+                if (error) {
+                  throw error
+                }
+                console.log(`Found ${data.length} expenses`)
+                return data
+              })
+          )
+        }),
+        "Failed to get expenses",
+        options
+      )
     },
-    [setError, setIsLoading],
+    [executeOperation]
   )
 
   const updateExpense = useCallback(
-    (id, data) => {
+    (id: string, data: any) => {
       console.log(`Updating expense ${id} with data:`, data)
-      return executeOperation(() => expenseService.update(id, data), "Failed to update expense")
+      return executeOperation(() => expenseService.update(id, data), "Failed to update expense", { id, data })
     },
     [executeOperation],
   )
 
   const deleteExpense = useCallback(
-    (id) => {
-      return executeOperation(() => expenseService.delete(id), "Failed to delete expense")
-    },
-    [executeOperation],
-  )
-
-  const getTotalExpenses = useCallback(
-    (options) => {
-      return executeOperation(() => expenseService.getTotal(options), "Failed to get total expenses")
+    (id: string) => {
+      return executeOperation(() => expenseService.delete(id), "Failed to delete expense", id)
     },
     [executeOperation],
   )
 
   // User operations
   const getCurrentUser = useCallback(() => {
-    return executeOperation(() => userService.getCurrentUser(), "Failed to get current user")
+    return executeOperation(() => userService.getCurrentUser(), "Failed to get current user", {})
   }, [executeOperation])
 
   const getUserById = useCallback(
-    (id) => {
-      return executeOperation(() => userService.getById(id), "Failed to get user")
+    (id: string) => {
+      return executeOperation(() => userService.getById(id), "Failed to get user", id)
     },
     [executeOperation],
   )
 
   const getAllUsers = useCallback(
-    (options) => {
-      return executeOperation(() => userService.getAll(options), "Failed to get users")
+    (options: any) => {
+      return executeOperation(() => userService.getAll(options), "Failed to get users", options)
     },
     [executeOperation],
   )
 
   const updateUserProfile = useCallback(
-    (data) => {
-      return executeOperation(() => userService.updateProfile(data), "Failed to update profile")
+    (data: any) => {
+      return executeOperation(() => userService.updateProfile(data), "Failed to update profile", data)
     },
     [executeOperation],
   )
 
   const updateUserAvatar = useCallback(
-    (avatarUrl) => {
-      return executeOperation(() => userService.updateAvatar(avatarUrl), "Failed to update avatar")
+    (avatarUrl: string) => {
+      return executeOperation(
+        async () => {
+          const userId = (await userService.getCurrentUser()).id
+          return userService.updateAvatar(userId, avatarUrl)
+        },
+        "Failed to update avatar",
+        { avatarUrl }
+      )
     },
-    [executeOperation],
+    [executeOperation]
   )
 
   const updateUserRole = useCallback(
-    (userId, role) => {
-      return executeOperation(() => userService.updateRole(userId, role), "Failed to update user role")
+    (userId: string, role: string) => {
+      return executeOperation(() => userService.updateRole(userId, role), "Failed to update user role", { userId, role })
     },
     [executeOperation],
   )
@@ -273,7 +267,6 @@ export function useStorage() {
     getAllExpenses,
     updateExpense,
     deleteExpense,
-    getTotalExpenses,
     // User operations
     getCurrentUser,
     getUserById,

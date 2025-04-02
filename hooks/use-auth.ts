@@ -2,12 +2,31 @@
 
 import { useEffect, useState } from "react"
 import { getSupabase } from "@/lib/supabase"
+import type { User } from "@/types"
+
+interface DbUser {
+  id: string
+  email: string
+  full_name: string | null
+  role: "admin" | "submitter"
+}
+
+function isDbUser(data: unknown): data is DbUser {
+  if (!data || typeof data !== "object") return false
+  const d = data as Record<string, unknown>
+  return (
+    typeof d.id === "string" &&
+    typeof d.email === "string" &&
+    (d.full_name === null || typeof d.full_name === "string") &&
+    (d.role === "admin" || d.role === "submitter")
+  )
+}
 
 export function useAuth() {
-  const [user, setUser] = useState(null)
-  const [userDetails, setUserDetails] = useState(null)
+  const [user, setUser] = useState<any>(null)
+  const [userDetails, setUserDetails] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<Error | null>(null)
 
   const supabase = getSupabase()
 
@@ -37,27 +56,39 @@ export function useAuth() {
         }
       } catch (err) {
         console.error("Auth hook error:", err)
-        setError(err)
+        setError(err instanceof Error ? err : new Error("Unknown error"))
         setLoading(false)
       }
     }
 
     // Get user details from the database
-    const getUserDetails = async (userId) => {
+    const getUserDetails = async (userId: string) => {
       try {
         console.log("Auth hook: Getting user details")
-        const { data, error } = await supabase.from("users").select("*").eq("id", userId).single()
+        const { data, error } = await supabase
+          .from("users")
+          .select("*")
+          .eq("id", userId)
+          .single()
 
         if (error) {
           throw error
         }
 
-        console.log("Auth hook: User details found", data)
-        setUserDetails(data)
-        setLoading(false)
+        if (data && isDbUser(data)) {
+          console.log("Auth hook: User details found", data)
+          const userData: User = {
+            id: data.id,
+            email: data.email,
+            full_name: data.full_name || undefined,
+            role: data.role
+          }
+          setUserDetails(userData)
+          setLoading(false)
+        }
       } catch (err) {
         console.error("Auth hook error getting user details:", err)
-        setError(err)
+        setError(err instanceof Error ? err : new Error("Unknown error"))
         setLoading(false)
       }
     }

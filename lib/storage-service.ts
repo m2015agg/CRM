@@ -1,4 +1,4 @@
-import { getSupabaseClient } from "@/lib/supabase/client"
+import { supabase } from "@/lib/supabase/client"
 import { format } from "date-fns"
 
 // Define the bucket name as a constant to ensure consistency
@@ -14,7 +14,6 @@ export const dailyReportsService = {
     mileage?: number | null
     comments?: string | null
   }) {
-    const supabase = getSupabaseClient()
     const formattedDate =
       typeof data.report_date === "string" ? data.report_date : format(data.report_date, "yyyy-MM-dd")
 
@@ -40,7 +39,6 @@ export const dailyReportsService = {
       endDate?: Date | string
     },
   ) {
-    const supabase = getSupabaseClient()
     let query = supabase
       .from("daily_reports")
       .select("*")
@@ -66,7 +64,6 @@ export const dailyReportsService = {
 
   // Get a specific daily report by date
   async getByDate(submitterId: string, date: Date | string) {
-    const supabase = getSupabaseClient()
     const formattedDate = typeof date === "string" ? date : format(date, "yyyy-MM-dd")
 
     const { data, error } = await supabase
@@ -88,7 +85,6 @@ export const dailyReportsService = {
       comments?: string | null
     },
   ) {
-    const supabase = getSupabaseClient()
     const { data: result, error } = await supabase
       .from("daily_reports")
       .update({
@@ -104,7 +100,6 @@ export const dailyReportsService = {
 
   // Delete a daily report
   async delete(id: string) {
-    const supabase = getSupabaseClient()
     const { error } = await supabase.from("daily_reports").delete().eq("id", id)
 
     if (error) throw error
@@ -126,7 +121,6 @@ export const expensesService = {
     discussion_notes?: string | null
     receipt_url?: string | null
   }) {
-    const supabase = getSupabaseClient()
     const formattedDate =
       typeof data.expense_date === "string" ? data.expense_date : format(data.expense_date, "yyyy-MM-dd")
 
@@ -158,7 +152,6 @@ export const expensesService = {
       endDate?: Date | string
     },
   ) {
-    const supabase = getSupabaseClient()
     let query = supabase
       .from("expenses")
       .select("*")
@@ -188,7 +181,6 @@ export const expensesService = {
 
   // Get a specific expense by ID
   async getById(id: string) {
-    const supabase = getSupabaseClient()
     const { data, error } = await supabase.from("expenses").select("*").eq("id", id).single()
 
     if (error) throw error
@@ -208,7 +200,6 @@ export const expensesService = {
       receipt_url?: string | null
     },
   ) {
-    const supabase = getSupabaseClient()
     const { data: result, error } = await supabase
       .from("expenses")
       .update({
@@ -224,7 +215,6 @@ export const expensesService = {
 
   // Delete an expense
   async delete(id: string) {
-    const supabase = getSupabaseClient()
     const { error } = await supabase.from("expenses").delete().eq("id", id)
 
     if (error) throw error
@@ -237,8 +227,6 @@ export const fileService = {
   // Upload a file to storage
   async uploadFile(file: File, bucket: string, folder: string): Promise<string | null> {
     try {
-      const supabase = getSupabaseClient()
-
       const fileExt = file.name.split(".").pop()
       const fileName = `${folder}/${crypto.randomUUID()}.${fileExt}`
 
@@ -267,8 +255,6 @@ export const fileService = {
   // Delete a file from storage
   async deleteFile(path: string, bucket: string): Promise<boolean> {
     try {
-      const supabase = getSupabaseClient()
-
       // Extract the file path from the public URL
       const urlParts = path.split(`${bucket}/`)
       if (urlParts.length < 2) return false
@@ -294,7 +280,6 @@ export const fileService = {
 export const weeklyReportService = {
   // Get all data for a weekly report
   async getWeeklyData(submitterId: string, startDate: Date | string, endDate: Date | string) {
-    const supabase = getSupabaseClient()
     const startDateStr = typeof startDate === "string" ? startDate : format(startDate, "yyyy-MM-dd")
     const endDateStr = typeof endDate === "string" ? endDate : format(endDate, "yyyy-MM-dd")
 

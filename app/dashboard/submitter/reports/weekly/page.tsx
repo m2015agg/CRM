@@ -26,7 +26,10 @@ export default function WeeklyReportPage() {
         <BackButton href="/dashboard/submitter/reports" label="Back to Reports" />
       </div>
       <div className="space-y-8">
-        <WeeklyReportView />
+        <WeeklyReportView 
+          startDate={startDateStr}
+          endDate={endDateStr}
+        />
 
         {/* Add the new expenses by call report */}
         <ExpensesByCallReport startDate={startDateStr} endDate={endDateStr} />

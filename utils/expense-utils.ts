@@ -1,4 +1,4 @@
-import type { Database } from "@/lib/database.types"
+import type { Database } from "@/types/supabase"
 
 type Expense = Database["public"]["Tables"]["expenses"]["Row"]
 type CallNote = Database["public"]["Tables"]["call_notes"]["Row"]

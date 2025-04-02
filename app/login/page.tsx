@@ -17,30 +17,19 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const { signIn, session, isLoading: authLoading } = useAuth()
+  const { signIn, session, isLoading: authLoading, user, sessionStatus } = useAuth()
   const router = useRouter()
 
   // Redirect if already authenticated
   useEffect(() => {
-    const handleRedirect = async () => {
-      console.log("=== LOGIN PAGE: AUTH CHECK ===")
-      console.log("Auth state:", { 
-        isLoading: authLoading, 
-        hasSession: !!session 
-      })
-
-      if (!authLoading && session) {
-        console.log("LOGIN PAGE: Session found, redirecting to dashboard")
-        try {
-          await router.push("/dashboard")
-        } catch (error) {
-          console.error("LOGIN PAGE: Error during redirect:", error)
-        }
-      }
+    if (user && sessionStatus === "authenticated") {
+      console.log("LOGIN FORM: Redirecting to dashboard")
+      setTimeout(() => {
+        router.push("/dashboard/submitter")
+        router.refresh()
+      }, 100)
     }
-
-    handleRedirect()
-  }, [session, authLoading, router])
+  }, [user, sessionStatus, router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -64,6 +53,10 @@ export default function LoginPage() {
 
       if (error) {
         console.error("❌ LOGIN FORM: Sign in error:", error)
+        console.error("❌ LOGIN FORM: Error details:", {
+          message: error.message,
+          name: error.name
+        })
         setError(`Authentication error: ${error.message}`)
         setIsLoading(false)
         return
@@ -94,9 +87,9 @@ export default function LoginPage() {
   }
 
   // Show loading state while checking auth
-  if (authLoading) {
+  if (sessionStatus === "loading") {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex justify-center items-center h-screen">
         <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-gray-900"></div>
       </div>
     )

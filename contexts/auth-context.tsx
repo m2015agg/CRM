@@ -3,11 +3,11 @@
 import type React from "react"
 import { createContext, useContext, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { getSupabaseClient } from "@/lib/supabase/client"
+import { supabase } from "@/lib/supabase/client"
 import type { User, Session } from "@supabase/supabase-js"
 
 type UserWithRole = User & {
-  role?: "admin" | "submitter"
+  role?: string
   full_name?: string
   avatar_url?: string | null
 }
@@ -16,6 +16,7 @@ interface AuthContextType {
   user: UserWithRole | null
   session: Session | null
   isLoading: boolean
+  sessionStatus: "loading" | "authenticated" | "unauthenticated"
   signIn: (
     email: string,
     password: string,
@@ -80,14 +81,11 @@ const getCachedUserData = (): { user: UserWithRole | null; session: Session | nu
   }
 }
 
-// Create a single instance of the Supabase client for the auth context
-// This is important to prevent multiple GoTrueClient instances
-const supabase = getSupabaseClient()
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserWithRole | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [sessionStatus, setSessionStatus] = useState<"loading" | "authenticated" | "unauthenticated">("loading")
   const router = useRouter()
 
   useEffect(() => {
@@ -97,6 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         console.log("Auth context: Fetching session")
         setIsLoading(true)
+        setSessionStatus("loading")
 
         // Check for cached data first
         // Retrieve cached user data from localStorage if available
@@ -158,6 +157,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (isMounted) {
               setSession(null)
               setUser(null)
+              setSessionStatus("unauthenticated")
               cacheUserData(null, null)
               setIsLoading(false)
             }
@@ -165,7 +165,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
 
           console.log("Auth context: Session found, user ID:", currentSession.user.id)
-          if (isMounted) setSession(currentSession)
+          if (isMounted) {
+            setSession(currentSession)
+            setSessionStatus("authenticated")
+          }
 
           // Fetch user data
           try {
@@ -373,7 +376,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  return <AuthContext.Provider value={{ user, session, isLoading, signIn, signOut }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, session, isLoading, sessionStatus, signIn, signOut }}>{children}</AuthContext.Provider>
 }
 
 export const useAuth = () => {

@@ -10,8 +10,17 @@ import { useKanbanOpportunities } from "@/hooks/use-kanban-opportunities"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { Opportunity } from "@/types"
 
-// Define the status columns
-const statusColumns = ["New Lead", "Contacted", "Proposal", "Negotiation", "Won", "Lost"]
+// Define the status columns based on the actual values in the database
+const statusColumns = ["new", "quoted", "accepted", "lost_deal"] as const
+type Status = typeof statusColumns[number]
+
+// Define a mapping for display names
+const statusDisplayNames: Record<Status, string> = {
+  new: "New Lead",
+  quoted: "Proposal Sent",
+  accepted: "Won",
+  lost_deal: "Lost",
+}
 
 export function KanbanBoard() {
   const { userDetails } = useAuth()
@@ -28,12 +37,12 @@ export function KanbanBoard() {
   const isAdmin = userDetails?.role === "admin"
 
   // Group opportunities by status
-  const opportunitiesByStatus: Record<string, Opportunity[]> = statusColumns.reduce(
+  const opportunitiesByStatus: Record<Status, Opportunity[]> = statusColumns.reduce(
     (acc, status) => {
       acc[status] = opportunities.filter((opp) => opp.status === status)
       return acc
     },
-    {} as Record<string, Opportunity[]>,
+    {} as Record<Status, Opportunity[]>,
   )
 
   const handleDragEnd = (result: DropResult) => {
@@ -86,11 +95,11 @@ export function KanbanBoard() {
       )}
 
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {statusColumns.map((status) => (
             <div key={status} className="space-y-2">
               <div className="flex justify-between items-center">
-                <h3 className="font-medium">{status}</h3>
+                <h3 className="font-medium">{statusDisplayNames[status]}</h3>
                 <Badge variant="outline">{opportunitiesByStatus[status]?.length || 0}</Badge>
               </div>
               <Droppable droppableId={status}>
@@ -116,8 +125,8 @@ export function KanbanBoard() {
                               className="mb-2 cursor-grab active:cursor-grabbing"
                             >
                               <CardContent className="p-3 space-y-2">
-                                <div className="font-medium truncate">{opp.company_name}</div>
-                                <div className="text-sm text-muted-foreground truncate">{opp.contact_name}</div>
+                                <div className="font-medium truncate">{opp.name}</div>
+                                <div className="text-sm text-muted-foreground truncate">{opp.company_name}</div>
                                 <div className="flex justify-between items-center">
                                   <span className="text-sm font-medium">{formatCurrency(opp.value || 0)}</span>
                                 </div>

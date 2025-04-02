@@ -9,6 +9,7 @@ import { useStorage } from "@/hooks/use-storage"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
+import { callNotesService } from "@/lib/services"
 
 interface ExpensesByCallReportProps {
   startDate: string
@@ -40,7 +41,7 @@ export function ExpensesByCallReport({ startDate, endDate, submitterId }: Expens
         })
 
         // Fetch calls
-        const callsData = await getAllCallNotes({
+        const callsData = await callNotesService.getAllCallNotes({
           startDate,
           endDate,
           userId: submitterId,

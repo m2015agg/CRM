@@ -16,10 +16,10 @@ import { createOpportunity, updateOpportunity } from "@/lib/services/opportunity
 
 // Form schema
 const formSchema = z.object({
-  name: z.string().min(1, "Opportunity name is required"),
+  title: z.string().min(1, "Title is required"),
   company_name: z.string().min(1, "Company name is required"),
-  contact_name: z.string().min(1, "Contact name is required"),
-  request_machine: z.string().min(1, "Request machine is required"),
+  contact_name: z.string().optional(),
+  request_machine: z.string().optional(),
   requested_attachments: z.string().optional(),
   value: z.coerce.number().min(0, "Value must be a positive number"),
   status: z.string().min(1, "Status is required"),
@@ -46,9 +46,9 @@ export function OpportunityForm({ onSubmitSuccess, onCancel, opportunity, initia
     resolver: zodResolver(formSchema),
     defaultValues: isEditing
       ? {
-          name: opportunity.name,
+          title: opportunity.title,
           company_name: opportunity.company_name,
-          contact_name: opportunity.contact_name,
+          contact_name: opportunity.contact_name || "",
           request_machine: opportunity.request_machine || "",
           requested_attachments: opportunity.requested_attachments || "",
           value: opportunity.value,
@@ -58,7 +58,7 @@ export function OpportunityForm({ onSubmitSuccess, onCancel, opportunity, initia
           trade_in_description: opportunity.trade_in_description || "",
         }
       : {
-          name: "",
+          title: "",
           company_name: "",
           contact_name: "",
           request_machine: "",
@@ -74,9 +74,9 @@ export function OpportunityForm({ onSubmitSuccess, onCancel, opportunity, initia
   useEffect(() => {
     if (isEditing) {
       form.reset({
-        name: opportunity.name,
+        title: opportunity.title,
         company_name: opportunity.company_name,
-        contact_name: opportunity.contact_name,
+        contact_name: opportunity.contact_name || "",
         request_machine: opportunity.request_machine || "",
         requested_attachments: opportunity.requested_attachments || "",
         value: opportunity.value,
@@ -87,7 +87,7 @@ export function OpportunityForm({ onSubmitSuccess, onCancel, opportunity, initia
       })
     } else {
       form.reset({
-        name: "",
+        title: "",
         company_name: "",
         contact_name: "",
         request_machine: "",
@@ -136,12 +136,12 @@ export function OpportunityForm({ onSubmitSuccess, onCancel, opportunity, initia
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField
             control={form.control}
-            name="name"
+            name="title"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Opportunity Name</FormLabel>
+                <FormLabel>Opportunity Title</FormLabel>
                 <FormControl>
-                  <Input placeholder="Enter opportunity name" {...field} />
+                  <Input placeholder="Enter opportunity title" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

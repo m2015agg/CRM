@@ -1,163 +1,285 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { format } from "date-fns"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ExpenseDetailView } from "@/components/expense-detail-view"
-import { getSupabaseClient } from "@/lib/supabase/client"
-import { FilePreview } from "@/components/file-preview"
+import { Skeleton } from "@/components/ui/skeleton"
+import { format, isToday, isPast, isFuture } from "date-fns"
+import { supabase } from "@/lib/supabase/client"
+import { FileText, DollarSign, Car, Plus, AlertCircle, Users } from "lucide-react"
+import Link from "next/link"
 
+/**
+ * Props interface for the DailyReportSummary component
+ */
 interface DailyReportSummaryProps {
-  date?: Date
+  date: Date
+  userId: string
 }
 
-export function DailyReportSummary({ date = new Date() }: DailyReportSummaryProps) {
+/**
+ * DailyReportSummary Component
+ * 
+ * Displays a summary card for a single day's report, including:
+ * - Report status (completed, missing, upcoming)
+ * - Mileage information
+ * - Expense totals
+ * - Client visit information
+ * - Quick actions (view/edit report)
+ */
+export function DailyReportSummary({ date, userId }: DailyReportSummaryProps) {
+  // State management for report data and UI
   const [report, setReport] = useState<any>(null)
+  const [expenses, setExpenses] = useState<any[]>([])
+  const [callNotes, setCallNotes] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [hasDuplicates, setHasDuplicates] = useState(false)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
+  // Format dates for display and database queries
+  const formattedDate = format(date, "yyyy-MM-dd")
+  const displayDate = format(date, "EEEE, MMMM d")
+
+  /**
+   * Effect hook to fetch all daily data (reports, expenses, call notes)
+   * Handles cleanup and error states
+   */
   useEffect(() => {
-    const fetchReport = async () => {
-      if (!date) return
+    let isMounted = true
+
+    const fetchDailyData = async () => {
+      if (!userId) return
 
       setIsLoading(true)
-      setError(null)
-
       try {
-        const formattedDate = format(date, "yyyy-MM-dd")
-        const supabase = getSupabaseClient()
+        if (!supabase) {
+          console.error("Supabase client not initialized")
+          return
+        }
 
-        const { data, error } = await supabase
+        // Fetch daily reports
+        const { data: reportData, error: reportError } = await supabase
           .from("daily_reports")
-          .select(`
-            *,
-            expenses:daily_report_expenses(*)
-          `)
+          .select("*")
+          .eq("submitter_id", userId)
           .eq("report_date", formattedDate)
-          .single()
+          .order("created_at", { ascending: false })
 
-        if (error) throw error
+        if (!reportError && reportData && reportData.length > 0) {
+          // Check for duplicate reports
+          if (reportData.length > 1) {
+            console.warn(`Found ${reportData.length} reports for ${formattedDate}`, reportData)
+            setHasDuplicates(true)
+          }
 
-        setReport(data)
-      } catch (err: any) {
-        console.error("Error fetching report:", err)
-        setError(err.message || "Failed to load report")
+          // Use the most recent report
+          if (isMounted) {
+            setReport(reportData[0])
+          }
+        } else if (reportError && reportError.code !== "PGRST116") {
+          console.error("Error fetching daily report:", reportError)
+        }
+
+        // Fetch expenses for the day
+        const { data: expensesData, error: expensesError } = await supabase
+          .from("expenses")
+          .select("*")
+          .eq("submitter_id", userId)
+          .eq("expense_date", formattedDate)
+
+        if (!expensesError && expensesData) {
+          if (isMounted) {
+            setExpenses(expensesData)
+          }
+        } else if (expensesError) {
+          console.error("Error fetching expenses:", expensesError)
+        }
+
+        // Fetch call notes for the day
+        const { data: callData, error: callError } = await supabase
+          .from("call_notes")
+          .select("*")
+          .eq("submitter_id", userId)
+          .eq("call_date", formattedDate)
+          .order("created_at", { ascending: false })
+
+        if (!callError && callData) {
+          if (isMounted) {
+            setCallNotes(callData)
+          }
+        } else if (callError) {
+          console.error("Error fetching call notes:", callError)
+        }
+      } catch (error) {
+        console.error("Error fetching daily data:", error)
       } finally {
-        setIsLoading(false)
+        if (isMounted) {
+          setIsLoading(false)
+        }
       }
     }
 
-    fetchReport()
-  }, [date])
+    if (userId) {
+      fetchDailyData()
+    }
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-      </div>
-    )
+    return () => {
+      isMounted = false
+    }
+  }, [userId, formattedDate, refreshTrigger])
+
+  // Calculate total expenses
+  const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0)
+
+  // Get unique client names from call notes
+  const clientNames = [...new Set(callNotes.map((call) => call.client_name))]
+
+  /**
+   * Determine the status of the report card based on the date
+   */
+  const getCardStatus = () => {
+    if (isToday(date)) return "today"
+    if (isPast(date)) {
+      return report ? "completed" : "missed"
+    }
+    if (isFuture(date)) return "upcoming"
+    return "normal"
   }
 
-  if (error || !report) {
+  const status = getCardStatus()
+
+  /**
+   * Get appropriate card styling based on status
+   */
+  const getCardClasses = () => {
+    switch (status) {
+      case "today":
+        return "border-blue-400 shadow-md"
+      case "completed":
+        return hasDuplicates ? "border-red-400" : "border-green-400"
+      case "missed":
+        return "border-amber-400"
+      case "upcoming":
+        return "border-gray-200 opacity-75"
+      default:
+        return ""
+    }
+  }
+
+  // Loading state with skeleton UI
+  if (isLoading) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-red-500">Error Loading Report</CardTitle>
-          <CardDescription>{error || "Report not found"}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button onClick={() => window.location.reload()}>Try Again</Button>
+      <Card className="h-[180px]">
+        <CardContent className="p-4">
+          <Skeleton className="h-5 w-1/3 mb-4" />
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-2/3" />
+            <Skeleton className="h-4 w-1/2" />
+          </div>
         </CardContent>
       </Card>
     )
   }
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex justify-between items-start">
-            <div>
-              <CardTitle>Daily Report Summary</CardTitle>
-              <CardDescription>{format(new Date(report.report_date), "MMMM d, yyyy")}</CardDescription>
-            </div>
-            <Badge variant={report.status === "submitted" ? "success" : "outline"}>
-              {report.status === "submitted" ? "Submitted" : "Draft"}
-            </Badge>
+    <Card className={`h-full ${getCardClasses()}`}>
+      <CardContent className="p-4">
+        <div className="flex justify-between items-start mb-3">
+          <div>
+            <h3 className="font-medium">{displayDate}</h3>
+            {status === "today" && (
+              <Badge variant="default" className="bg-blue-500 hover:bg-blue-600">
+                Today
+              </Badge>
+            )}
+            {status === "completed" && (
+              <Badge
+                variant="default"
+                className={hasDuplicates ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"}
+              >
+                {hasDuplicates ? "Duplicates" : "Completed"}
+              </Badge>
+            )}
+            {status === "missed" && isPast(date) && (
+              <Badge variant="default" className="bg-amber-500 hover:bg-amber-600">
+                Missing
+              </Badge>
+            )}
           </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <h3 className="font-medium mb-2">Call Details</h3>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Number of Calls:</span>
-                  <span className="font-medium">{report.number_of_calls}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Number of Contacts:</span>
-                  <span className="font-medium">{report.number_of_contacts}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Number of Appointments:</span>
-                  <span className="font-medium">{report.number_of_appointments}</span>
-                </div>
-              </div>
-            </div>
+        </div>
 
-            <div>
-              <h3 className="font-medium mb-2">Expenses</h3>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total Expenses:</span>
-                  <span className="font-medium">
-                    $
-                    {report.expenses?.reduce((sum: number, exp: any) => sum + (exp.amount || 0), 0).toFixed(2) ||
-                      "0.00"}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Number of Expense Items:</span>
-                  <span className="font-medium">{report.expenses?.length || 0}</span>
+        {report ? (
+          <div className="space-y-2">
+            {hasDuplicates && (
+              <div className="flex items-center text-xs text-red-600 mb-1">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                <span>Multiple reports found</span>
+              </div>
+            )}
+
+            {report.mileage > 0 && (
+              <div className="flex items-center text-sm">
+                <Car className="h-4 w-4 mr-2 text-muted-foreground" />
+                <span>{report.mileage} miles</span>
+              </div>
+            )}
+
+            {expenses.length > 0 && (
+              <div className="flex items-center text-sm">
+                <DollarSign className="h-4 w-4 mr-2 text-muted-foreground" />
+                <span>${totalExpenses.toFixed(2)} in expenses</span>
+              </div>
+            )}
+
+            {clientNames.length > 0 && (
+              <div className="flex items-start text-sm">
+                <Users className="h-4 w-4 mr-2 mt-0.5 text-muted-foreground" />
+                <div>
+                  {clientNames.length <= 3 ? (
+                    <span>{clientNames.join(", ")}</span>
+                  ) : (
+                    <span>
+                      {clientNames.slice(0, 2).join(", ")}
+                      <span className="text-muted-foreground"> +{clientNames.length - 2} more</span>
+                    </span>
+                  )}
                 </div>
               </div>
-            </div>
+            )}
+
+            {report.comments && <div className="text-sm text-muted-foreground line-clamp-2">{report.comments}</div>}
           </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-16 text-center text-muted-foreground">
+            {isPast(date) ? (
+              <p className="text-sm">No report submitted</p>
+            ) : (
+              <p className="text-sm">Report not yet created</p>
+            )}
+          </div>
+        )}
+      </CardContent>
 
-          {report.notes && (
-            <div>
-              <h3 className="font-medium mb-2">Notes</h3>
-              <p className="text-sm text-muted-foreground whitespace-pre-line">{report.notes}</p>
-            </div>
-          )}
-
-          {report.expenses && report.expenses.length > 0 && (
-            <div>
-              <h3 className="font-medium mb-2">Expense Details</h3>
-              <div className="space-y-4">
-                {report.expenses.map((expense: any) => (
-                  <ExpenseDetailView key={expense.id} expense={expense} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {report.file_urls && report.file_urls.length > 0 && (
-            <div>
-              <h3 className="font-medium mb-2">Attached Files</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                {report.file_urls.map((url: string, index: number) => (
-                  <FilePreview key={index} url={url} />
-                ))}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+      <CardFooter className="p-4 pt-0">
+        {report ? (
+          <Button variant="outline" className="w-full" asChild>
+            <Link href={`/dashboard/submitter/reports/daily?date=${formattedDate}`}>
+              <FileText className="h-4 w-4 mr-2" />
+              {hasDuplicates ? "Fix Duplicates" : "View Report"}
+            </Link>
+          </Button>
+        ) : (
+          <Button className="w-full" asChild>
+            <Link href={`/dashboard/submitter/reports/daily?date=${formattedDate}`}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Report
+            </Link>
+          </Button>
+        )}
+      </CardFooter>
+    </Card>
   )
 }
 

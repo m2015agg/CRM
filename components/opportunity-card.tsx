@@ -6,9 +6,12 @@ import { formatDistanceToNow } from "date-fns"
 interface OpportunityCardProps {
   opportunity: {
     id: string
-    company_name: string
-    contact_name: string
-    value: number
+    title?: string
+    name?: string
+    company_name?: string
+    client_name?: string
+    description: string | null
+    value: number | null
     status: string
     updated_at: string
     created_at?: string
@@ -38,29 +41,42 @@ export function OpportunityCard({ opportunity, isDragging }: OpportunityCardProp
   }
 
   // Value badge color based on amount
-  const getValueColor = (value: number) => {
+  const getValueColor = (value: number | null) => {
+    if (!value) return "bg-gray-100 text-gray-800 hover:bg-gray-200"
     if (value >= 10000) return "bg-green-100 text-green-800 hover:bg-green-200"
     if (value >= 5000) return "bg-blue-100 text-blue-800 hover:bg-blue-200"
     return "bg-gray-100 text-gray-800 hover:bg-gray-200"
   }
 
   const statusColor = getStatusColor(opportunity.status)
-  const valueColor = getValueColor(opportunity.value || 0)
+  const valueColor = getValueColor(opportunity.value)
+
+  // Get the title and company name, handling both old and new field names
+  const title = opportunity.title || opportunity.name || "Untitled"
+  const companyName = opportunity.company_name || opportunity.client_name || "No Company"
 
   return (
-    <Card className={`mb-3 border-2 shadow-sm ${statusColor} ${isDragging ? "shadow-md ring-2 ring-primary/20" : ""}`}>
-      <CardContent className="p-3 space-y-2">
-        <div className="flex justify-between items-start">
-          <h4 className="font-medium text-sm truncate">{opportunity.company_name}</h4>
-          <Badge variant="secondary" className={`ml-2 shrink-0 ${valueColor}`}>
-            {formatCurrency(opportunity.value || 0)}
-          </Badge>
-        </div>
-
-        <div className="text-xs text-muted-foreground truncate">{opportunity.contact_name || "No contact"}</div>
-
-        <div className="flex justify-between items-center text-xs text-muted-foreground pt-1 border-t border-border/50">
-          <span>Updated {formattedDate}</span>
+    <Card className={`${isDragging ? "opacity-50" : ""}`}>
+      <CardContent className="p-4">
+        <div className="space-y-2">
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="font-medium">{title}</h3>
+              <p className="text-sm text-muted-foreground">{companyName}</p>
+            </div>
+            <Badge variant="outline">{opportunity.status}</Badge>
+          </div>
+          {opportunity.description && (
+            <p className="text-sm text-muted-foreground line-clamp-2">{opportunity.description}</p>
+          )}
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">
+              {opportunity.value ? formatCurrency(opportunity.value) : "No value"}
+            </span>
+            <span className="text-muted-foreground">
+              Updated {formattedDate}
+            </span>
+          </div>
         </div>
       </CardContent>
     </Card>

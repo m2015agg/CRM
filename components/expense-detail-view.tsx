@@ -96,15 +96,15 @@ export function ExpenseDetailView({ expense, onEdit }: ExpenseDetailViewProps) {
                     <div className="relative">
                       <FilePreview
                         url={expense.receipt_url}
+                        bucket="receipts"
                         className="max-w-sm mx-auto border border-gray-200 rounded-md shadow-sm"
-                        showRemoveButton={false}
                       />
                       <div className="absolute top-2 right-2 flex gap-1">
                         <Button
                           variant="secondary"
                           size="sm"
                           className="h-7 w-7 p-0 rounded-full bg-white/90 hover:bg-white"
-                          onClick={() => window.open(expense.receipt_url, "_blank")}
+                          onClick={() => window.open(expense.receipt_url || "", "_blank")}
                         >
                           <ExternalLink className="h-3.5 w-3.5" />
                           <span className="sr-only">Open Full Size</span>
@@ -116,12 +116,7 @@ export function ExpenseDetailView({ expense, onEdit }: ExpenseDetailViewProps) {
                     </Button>
                   </div>
                 ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setViewReceipt(true)}
-                    className="flex items-center"
-                  >
+                  <Button variant="outline" size="sm" onClick={() => setViewReceipt(true)} className="flex items-center">
                     <Receipt className="h-4 w-4 mr-2" />
                     View Receipt
                   </Button>

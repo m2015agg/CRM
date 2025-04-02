@@ -1,18 +1,27 @@
-import { getSupabaseClient } from "@/lib/supabase/client"
 import { format } from "date-fns"
 import { deleteFile } from "@/lib/storage-utils"
-import type { Database } from "@/lib/database.types"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { Database } from "@/types/supabase"
 
 type CallNote = Database["public"]["Tables"]["call_notes"]["Row"]
 type CallNoteInsert = Database["public"]["Tables"]["call_notes"]["Insert"]
 type CallNoteUpdate = Database["public"]["Tables"]["call_notes"]["Update"]
 
+interface GetCallNotesParams {
+  startDate: string
+  endDate: string
+  userId: string
+}
+
 export const callNotesService = {
   /**
-   * Create a new call note
+   * Creates a new call note in the database
+   * @param data Object containing call note details
+   * @returns Promise resolving to the created call note
    */
   async create(data: {
     submitter_id: string
+    daily_reports_uuid: string
     client_name: string
     contact_name?: string | null
     location_type?: string | null
@@ -20,13 +29,15 @@ export const callNotesService = {
     notes: string
     attachments?: string[] | null
   }): Promise<CallNote> {
-    const supabase = getSupabaseClient()
+    const supabase = createClientComponentClient()
 
-    // Format the date if it's a Date object
+    // Format the date to YYYY-MM-DD format if it's a Date object
     const formattedDate = data.call_date instanceof Date ? format(data.call_date, "yyyy-MM-dd") : data.call_date
 
+    // Prepare data for insertion, handling null values
     const callNoteData: CallNoteInsert = {
       submitter_id: data.submitter_id,
+      daily_reports_uuid: data.daily_reports_uuid,
       client_name: data.client_name,
       contact_name: data.contact_name || null,
       location_type: data.location_type || null,
@@ -35,6 +46,7 @@ export const callNotesService = {
       attachments: data.attachments && data.attachments.length > 0 ? data.attachments : null,
     }
 
+    // Insert the call note and return the created record
     const { data: result, error } = await supabase.from("call_notes").insert(callNoteData).select().single()
 
     if (error) {
@@ -50,10 +62,12 @@ export const callNotesService = {
   },
 
   /**
-   * Get a call note by ID
+   * Retrieves a specific call note by its ID
+   * @param id The ID of the call note to retrieve
+   * @returns Promise resolving to the call note or null if not found
    */
   async getById(id: string): Promise<CallNote | null> {
-    const supabase = getSupabaseClient()
+    const supabase = createClientComponentClient()
 
     const { data, error } = await supabase.from("call_notes").select("*").eq("id", id).single()
 
@@ -70,7 +84,10 @@ export const callNotesService = {
   },
 
   /**
-   * Get call notes by submitter ID
+   * Retrieves all call notes for a specific submitter with optional filtering
+   * @param submitterId The ID of the submitter
+   * @param options Optional filters for date range and pagination
+   * @returns Promise resolving to an array of call notes
    */
   async getBySubmitter(
     submitterId: string,
@@ -81,29 +98,28 @@ export const callNotesService = {
       offset?: number
     },
   ): Promise<CallNote[]> {
-    const supabase = getSupabaseClient()
+    const supabase = createClientComponentClient()
 
+    // Build the base query
     let query = supabase
       .from("call_notes")
       .select("*")
       .eq("submitter_id", submitterId)
       .order("call_date", { ascending: false })
 
-    // Apply date filters if provided
+    // Apply date range filters if provided
     if (options?.startDate) {
       const startDateStr =
         options.startDate instanceof Date ? format(options.startDate, "yyyy-MM-dd") : options.startDate
-
       query = query.gte("call_date", startDateStr)
     }
 
     if (options?.endDate) {
       const endDateStr = options.endDate instanceof Date ? format(options.endDate, "yyyy-MM-dd") : options.endDate
-
       query = query.lte("call_date", endDateStr)
     }
 
-    // Apply pagination if provided
+    // Apply pagination if specified
     if (options?.limit) {
       query = query.limit(options.limit)
     }
@@ -123,11 +139,37 @@ export const callNotesService = {
   },
 
   /**
-   * Update a call note
+   * Retrieves call notes by daily report UUID
+   * @param dailyReportUuid The UUID of the daily report
+   * @returns Promise resolving to an array of call notes
+   */
+  async getByDailyReport(dailyReportUuid: string): Promise<CallNote[]> {
+    const supabase = createClientComponentClient()
+
+    const { data, error } = await supabase
+      .from("call_notes")
+      .select("*")
+      .eq("daily_reports_uuid", dailyReportUuid)
+      .order("call_date", { ascending: true })
+
+    if (error) {
+      console.error("Error getting call notes by daily report:", error)
+      throw error
+    }
+
+    return data || []
+  },
+
+  /**
+   * Updates an existing call note
+   * @param id The ID of the call note to update
+   * @param data Object containing the fields to update
+   * @returns Promise resolving to the updated call note
    */
   async update(
     id: string,
     data: {
+      daily_reports_uuid?: string
       client_name?: string
       contact_name?: string | null
       location_type?: string | null
@@ -136,17 +178,13 @@ export const callNotesService = {
       attachments?: string[] | null
     },
   ): Promise<CallNote> {
-    const supabase = getSupabaseClient()
+    const supabase = createClientComponentClient()
 
-    // Format the date if it's a Date object and provided
-    const updateData: CallNoteUpdate = { ...data }
-
-    if (data.call_date instanceof Date) {
-      updateData.call_date = format(data.call_date, "yyyy-MM-dd")
+    // Format the date if provided
+    const updateData: CallNoteUpdate = {
+      ...data,
+      call_date: data.call_date instanceof Date ? format(data.call_date, "yyyy-MM-dd") : data.call_date,
     }
-
-    // Add updated_at timestamp
-    updateData.updated_at = new Date().toISOString()
 
     const { data: result, error } = await supabase.from("call_notes").update(updateData).eq("id", id).select().single()
 
@@ -163,10 +201,12 @@ export const callNotesService = {
   },
 
   /**
-   * Delete a call note and its attachments
+   * Deletes a call note and its associated attachments
+   * @param id The ID of the call note to delete
+   * @returns Promise resolving to true if successful
    */
   async delete(id: string): Promise<boolean> {
-    const supabase = getSupabaseClient()
+    const supabase = createClientComponentClient()
 
     // First, get the call note to access its attachments
     const { data: callNote, error: fetchError } = await supabase
@@ -180,10 +220,10 @@ export const callNotesService = {
       throw fetchError
     }
 
-    // Delete the attachments if they exist
+    // Delete all attachments from storage if they exist
     if (callNote?.attachments && callNote.attachments.length > 0) {
       await Promise.all(
-        callNote.attachments.map(async (url) => {
+        callNote.attachments.map(async (url: string) => {
           try {
             await deleteFile(url)
           } catch (err) {
@@ -194,7 +234,7 @@ export const callNotesService = {
       )
     }
 
-    // Delete the call note record
+    // Delete the call note record from the database
     const { error: deleteError } = await supabase.from("call_notes").delete().eq("id", id)
 
     if (deleteError) {
@@ -206,12 +246,15 @@ export const callNotesService = {
   },
 
   /**
-   * Add an attachment to a call note
+   * Adds an attachment to an existing call note
+   * @param id The ID of the call note
+   * @param attachmentUrl The URL of the attachment to add
+   * @returns Promise resolving to the updated call note
    */
   async addAttachment(id: string, attachmentUrl: string): Promise<CallNote> {
-    const supabase = getSupabaseClient()
+    const supabase = createClientComponentClient()
 
-    // First, get the current attachments
+    // Get current attachments
     const { data: callNote, error: fetchError } = await supabase
       .from("call_notes")
       .select("attachments")
@@ -223,7 +266,7 @@ export const callNotesService = {
       throw fetchError
     }
 
-    // Create a new attachments array with the new URL
+    // Add the new attachment URL to the existing attachments array
     const currentAttachments = callNote?.attachments || []
     const updatedAttachments = [...currentAttachments, attachmentUrl]
 
@@ -251,12 +294,15 @@ export const callNotesService = {
   },
 
   /**
-   * Remove an attachment from a call note
+   * Removes an attachment from a call note
+   * @param id The ID of the call note
+   * @param attachmentUrl The URL of the attachment to remove
+   * @returns Promise resolving to the updated call note
    */
   async removeAttachment(id: string, attachmentUrl: string): Promise<CallNote> {
-    const supabase = getSupabaseClient()
+    const supabase = createClientComponentClient()
 
-    // First, get the current attachments
+    // Get current attachments
     const { data: callNote, error: fetchError } = await supabase
       .from("call_notes")
       .select("attachments")
@@ -272,10 +318,10 @@ export const callNotesService = {
       throw new Error("Call note has no attachments")
     }
 
-    // Filter out the attachment to remove
-    const updatedAttachments = callNote.attachments.filter((url) => url !== attachmentUrl)
+    // Remove the specified attachment from the array
+    const updatedAttachments = callNote.attachments.filter((url: string) => url !== attachmentUrl)
 
-    // Try to delete the file from storage
+    // Delete the attachment file from storage
     try {
       await deleteFile(attachmentUrl)
     } catch (err) {
@@ -283,7 +329,7 @@ export const callNotesService = {
       // Continue with the database update even if file deletion fails
     }
 
-    // Update the call note with the new attachments array
+    // Update the call note with the filtered attachments array
     const { data: result, error: updateError } = await supabase
       .from("call_notes")
       .update({
@@ -305,5 +351,35 @@ export const callNotesService = {
 
     return result
   },
+}
+
+/**
+ * Retrieves all call notes for a user within a specified date range
+ * @param params Object containing startDate, endDate, and userId
+ * @returns Promise resolving to an array of call notes
+ */
+export async function getAllCallNotes({ startDate, endDate, userId }: GetCallNotesParams) {
+  try {
+    const supabase = createClientComponentClient()
+    
+    // Query call notes with date range and user filters
+    const { data, error } = await supabase
+      .from('call_notes')
+      .select('*')
+      .eq('submitter_id', userId)
+      .gte('call_date', startDate)
+      .lte('call_date', endDate)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching call notes:', error)
+      throw error
+    }
+
+    return data
+  } catch (error) {
+    console.error('Error in getAllCallNotes:', error)
+    throw error
+  }
 }
 

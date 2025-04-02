@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
-import { getSupabaseClient } from "@/lib/supabase/client"
+import { supabase } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -18,9 +18,6 @@ import { BackButton } from "@/components/back-button"
 
 // Define the bucket name as a constant to ensure consistency
 const AVATARS_BUCKET = "avatars"
-
-// Get a reference to the Supabase client
-const supabase = getSupabaseClient()
 
 export default function ProfilePage() {
   const { user, isLoading } = useAuth()

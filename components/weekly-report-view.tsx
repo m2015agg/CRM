@@ -8,8 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { FilePreview } from "@/components/file-preview"
-import { getSupabaseClient } from "@/lib/supabase/client"
-import type { Database } from "@/lib/database.types"
+import { supabase } from "@/lib/supabase/client"
+import type { Database } from "@/types/supabase"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AlertCircle, ChevronDown, ChevronUp } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -42,15 +42,24 @@ export function WeeklyReportView({ startDate, endDate, submitterId }: WeeklyRepo
       setError(null)
 
       try {
-        const supabase = getSupabaseClient()
+        console.log("Starting data fetch")
 
         // Fetch user ID if not provided
         let userId = submitterId
         if (!userId) {
+          console.log("No submitterId provided, fetching current user")
           const {
             data: { user },
+            error: userError
           } = await supabase.auth.getUser()
+          
+          if (userError) {
+            console.error("Error fetching user:", userError)
+            throw new Error(`Failed to fetch user: ${userError.message}`)
+          }
+          
           userId = user?.id
+          console.log("Current user ID:", userId)
 
           if (!userId) {
             throw new Error("User not authenticated")
@@ -94,7 +103,7 @@ export function WeeklyReportView({ startDate, endDate, submitterId }: WeeklyRepo
         setDailyReports(reportData || [])
 
         // Calculate total mileage
-        const mileage = reportData?.reduce((sum, report) => sum + (report.mileage || 0), 0) || 0
+        const mileage = reportData?.reduce((sum: number, report: DailyReport) => sum + (report.mileage || 0), 0) || 0
         setTotalMileage(mileage)
 
         // Fetch expenses
@@ -115,19 +124,19 @@ export function WeeklyReportView({ startDate, endDate, submitterId }: WeeklyRepo
         setExpenses(expenseData || [])
 
         // Calculate total expenses
-        const total = expenseData?.reduce((sum, expense) => sum + expense.amount, 0) || 0
-        setTotalExpenses(total)
-      } catch (err) {
-        console.error("Error in fetchWeeklyData:", err)
-        setError(err instanceof Error ? err.message : "An error occurred while fetching data")
+        const totalExp = expenseData?.reduce((sum: number, expense: Expense) => sum + (expense.amount || 0), 0) || 0
+        setTotalExpenses(totalExp)
+
+      } catch (error) {
+        console.error("Error in fetchWeeklyData:", error)
+        setError(error instanceof Error ? error.message : "An unexpected error occurred")
       } finally {
+        console.log("Setting loading to false")
         setLoading(false)
       }
     }
 
-    if (startDate && endDate) {
-      fetchWeeklyData()
-    }
+    fetchWeeklyData()
   }, [startDate, endDate, submitterId])
 
   const formatCurrency = (amount: number) => {
@@ -321,10 +330,10 @@ export function WeeklyReportView({ startDate, endDate, submitterId }: WeeklyRepo
                     </Badge>
                   </div>
 
-                  {report.comments && (
+                  {report.notes && (
                     <div>
-                      <h4 className="text-sm font-medium mb-1">Comments</h4>
-                      <p className="text-sm whitespace-pre-wrap">{report.comments}</p>
+                      <h4 className="text-sm font-medium mb-1">Notes</h4>
+                      <p className="text-sm whitespace-pre-wrap">{report.notes}</p>
                     </div>
                   )}
                 </CardContent>
@@ -371,17 +380,14 @@ export function WeeklyReportView({ startDate, endDate, submitterId }: WeeklyRepo
                     </div>
                   )}
 
-                  {expense.discussion_notes && (
-                    <div>
-                      <h4 className="text-sm font-medium mb-1">Discussion Notes</h4>
-                      <p className="text-sm whitespace-pre-wrap">{expense.discussion_notes}</p>
-                    </div>
-                  )}
-
                   {expense.receipt_url && (
                     <div>
                       <h4 className="text-sm font-medium mb-2">Receipt</h4>
-                      <FilePreview url={expense.receipt_url} className="max-w-xs" />
+                      <FilePreview 
+                        url={expense.receipt_url} 
+                        bucket="receipts" 
+                        className="max-w-xs" 
+                      />
                     </div>
                   )}
                 </CardContent>

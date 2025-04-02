@@ -1,100 +1,49 @@
 "use client"
 
-import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { format, parseISO, isValid } from "date-fns"
 import { DailyCallReportForm } from "@/components/daily-call-report-form"
-import { DailyReportSummary } from "@/components/daily-report-summary"
-import { Button } from "@/components/ui/button"
-import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { CalendarIcon } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { getSupabaseClient } from "@/lib/supabase/client"
-
+import { BackButton } from "@/components/back-button"
+import { parseISO } from "date-fns"
+import { useState } from "react"
+/**
+ * DailyReportPage Component
+ * 
+ * This page handles the creation and editing of daily call reports.
+ * It provides:
+ * - Date-based report loading
+ * - Navigation back to dashboard
+ * - Form submission handling
+ */
 export default function DailyReportPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const dateParam = searchParams.get("date")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const [date, setDate] = useState<Date | undefined>(
-    dateParam && isValid(parseISO(dateParam)) ? parseISO(dateParam) : new Date(),
-  )
-  const [isLoading, setIsLoading] = useState(true)
-  const [reportExists, setReportExists] = useState(false)
+  // Parse the date parameter if it exists
+  const initialDate = dateParam ? parseISO(dateParam) : new Date()
 
-  useEffect(() => {
-    const checkReportExists = async () => {
-      if (!date) return
+  const handleCancel = () => {
+    router.push("/dashboard/submitter")
+  }
 
-      setIsLoading(true)
-      try {
-        const formattedDate = format(date, "yyyy-MM-dd")
-        const supabase = getSupabaseClient()
-
-        const { data, error } = await supabase
-          .from("daily_reports")
-          .select("id")
-          .eq("report_date", formattedDate)
-          .single()
-
-        if (error && error.code !== "PGRST116") {
-          console.error("Error checking report:", error)
-        }
-
-        setReportExists(!!data)
-      } catch (err) {
-        console.error("Failed to check report:", err)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    checkReportExists()
-  }, [date])
-
-  const handleDateChange = (newDate: Date | undefined) => {
-    if (!newDate) return
-
-    setDate(newDate)
-    const formattedDate = format(newDate, "yyyy-MM-dd")
-    router.push(`/dashboard/submitter/reports/daily?date=${formattedDate}`)
+  const handleSubmit = () => {
+    setIsSubmitting(true)
+    // Add a small delay to ensure the database has time to update
+    setTimeout(() => {
+      router.push("/dashboard/submitter")
+    }, 500)
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-8">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Daily Call Report</h1>
-          <p className="text-muted-foreground">Submit your daily call report and track your progress</p>
-        </div>
-
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              className={cn("w-[240px] justify-start text-left font-normal", !date && "text-muted-foreground")}
-            >
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {date ? format(date, "PPP") : <span>Pick a date</span>}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="end">
-            <Calendar mode="single" selected={date} onSelect={handleDateChange} initialFocus />
-          </PopoverContent>
-        </Popover>
+    <div className="mx-auto max-w-4xl">
+      <div className="mb-4">
+        <BackButton href="/dashboard/submitter" label="Back to Dashboard" />
       </div>
-
-      {isLoading ? (
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-        </div>
-      ) : reportExists ? (
-        <DailyReportSummary date={date} />
-      ) : (
-        <DailyCallReportForm date={date} />
-      )}
+      <DailyCallReportForm
+        date={initialDate}
+        key={`${dateParam || "new-report"}-${Date.now()}`} // Add timestamp to force re-render
+      />
     </div>
   )
 }
-

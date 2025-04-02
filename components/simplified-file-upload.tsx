@@ -41,12 +41,14 @@ export function SimplifiedFileUpload({
   const [error, setError] = useState<string | null>(null)
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(null)
   const [showReceiptPreview, setShowReceiptPreview] = useState(false)
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false)
 
   // Initialize with the initial URL if provided
   useEffect(() => {
     if (initialUrl) {
       console.log("SimplifiedFileUpload: Using initial URL:", initialUrl)
       setUploadedUrl(initialUrl)
+      setShowReceiptPreview(true) // Show preview by default when initial URL is provided
       // We don't call onFileUploaded here to avoid unexpected side effects
     }
   }, [initialUrl])
@@ -57,6 +59,16 @@ export function SimplifiedFileUpload({
       setShowReceiptPreview(false)
     }
   }, [activeTab])
+
+  // Hide success message after 10 seconds
+  useEffect(() => {
+    if (showSuccessMessage) {
+      const timer = setTimeout(() => {
+        setShowSuccessMessage(false)
+      }, 10000)
+      return () => clearTimeout(timer)
+    }
+  }, [showSuccessMessage])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -97,6 +109,7 @@ export function SimplifiedFileUpload({
       if (result.success && result.url) {
         console.log("Upload successful, URL:", result.url)
         setUploadedUrl(result.url)
+        setShowSuccessMessage(true) // Show success message when new file is uploaded
 
         // Call the callback with the URL
         onFileUploaded(result.url)
@@ -155,44 +168,48 @@ export function SimplifiedFileUpload({
 
   return (
     <div className={`space-y-2 ${className}`}>
-      <div className="flex items-center gap-2">
-        {isReceipt ? (
-          <>
+      {/* Only show upload buttons if no file is uploaded */}
+      {!uploadedUrl && (
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={triggerFileSelect}
+            className="flex-1"
+            disabled={isUploading}
+          >
+            {isUploading ? (
+              <>
+                <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-current" />
+                <span className="ml-2">Uploading...</span>
+              </>
+            ) : (
+              <>
+                <Paperclip className="mr-2 h-4 w-4" />
+                {label}
+              </>
+            )}
+          </Button>
+          {isReceipt && (
             <Button
               type="button"
               variant="outline"
+              size="sm"
               onClick={triggerFileSelect}
               disabled={isUploading}
-              className="flex-1"
-            >
-              <Paperclip className="mr-2 h-4 w-4" />
-              {uploadedUrl ? "Receipt Uploaded" : label}
-            </Button>
-            {/* Add camera button for mobile devices */}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleCameraCapture}
-              disabled={isUploading}
-              className="w-10 p-0"
             >
               <Camera className="h-4 w-4" />
-              <span className="sr-only">Take Photo</span>
             </Button>
-          </>
-        ) : (
-          <Button type="button" variant="outline" onClick={triggerFileSelect} disabled={isUploading} className="w-full">
-            <Paperclip className="mr-2 h-4 w-4" />
-            {uploadedUrl ? "File Uploaded" : label}
-          </Button>
-        )}
-        <Input ref={fileInputRef} type="file" accept={accept} onChange={handleFileChange} className="hidden" />
-      </div>
-
-      {isUploading && (
-        <div className="space-y-1">
-          <Progress value={progress} className="h-2" />
-          <p className="text-xs text-center text-muted-foreground">Uploading... {progress}%</p>
+          )}
+          <Input
+            ref={fileInputRef}
+            type="file"
+            accept={accept}
+            onChange={handleFileChange}
+            className="hidden"
+            disabled={isUploading}
+          />
         </div>
       )}
 
@@ -203,7 +220,7 @@ export function SimplifiedFileUpload({
         </Alert>
       )}
 
-      {uploadedUrl && isExpensesTab && (
+      {uploadedUrl && showSuccessMessage && (
         <div className="text-xs text-green-600 flex items-center justify-between">
           <span className="truncate">Receipt uploaded successfully</span>
           <Button
@@ -215,16 +232,11 @@ export function SimplifiedFileUpload({
           >
             {showReceiptPreview ? "Hide Receipt" : "View Receipt"}
           </Button>
-          {process.env.NODE_ENV === "development" && (
-            <Button type="button" variant="ghost" size="sm" className="h-6 ml-1 text-xs" onClick={debugUrl}>
-              Debug
-            </Button>
-          )}
         </div>
       )}
 
-      {/* Only show receipt preview when on expenses tab and showReceiptPreview is true */}
-      {uploadedUrl && isExpensesTab && showReceiptPreview && (
+      {/* Show receipt preview when uploadedUrl exists and showReceiptPreview is true */}
+      {uploadedUrl && showReceiptPreview && (
         <div className="mt-2">
           <FilePreview url={uploadedUrl} showRemoveButton={false} />
         </div>

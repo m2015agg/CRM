@@ -6,7 +6,7 @@ import { toast } from "sonner"
 import { KanbanColumn } from "./kanban-column"
 import { Button } from "@/components/ui/button"
 import { RefreshCw, Plus, Filter } from "lucide-react"
-import { getSupabaseClient } from "@/lib/supabase/client"
+import { supabase } from "@/lib/supabase/client"
 import type { User } from "@/types"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { OpportunityDialog } from "./opportunity-dialog"
@@ -30,11 +30,10 @@ export function FullKanbanBoard() {
     const fetchUsers = async () => {
       try {
         setIsLoadingUsers(true)
-        const supabase = getSupabaseClient()
 
         const { data, error } = await supabase
           .from("users")
-          .select("id, email, full_name")
+          .select("id, email, full_name, role")
           .order("full_name", { ascending: true })
 
         if (error) throw error
@@ -54,7 +53,6 @@ export function FullKanbanBoard() {
   const fetchOpportunities = useCallback(async () => {
     try {
       setIsLoading(true)
-      const supabase = getSupabaseClient()
 
       // Now fetch the actual data
       let query = supabase.from("opportunities").select("*").order("updated_at", { ascending: false })
@@ -102,8 +100,6 @@ export function FullKanbanBoard() {
     fetchOpportunities()
 
     // Set up real-time subscription
-    const supabase = getSupabaseClient()
-
     const subscription = supabase
       .channel("opportunities_changes")
       .on(
@@ -163,7 +159,6 @@ export function FullKanbanBoard() {
 
     // Update in the database
     try {
-      const supabase = getSupabaseClient()
       const { error } = await supabase.from("opportunities").update({ status: destinationStatus }).eq("id", draggableId)
 
       if (error) {

@@ -28,24 +28,24 @@ export function OpportunityCard({ opportunity, isDragging }: OpportunityCardProp
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case "new":
-        return "bg-blue-50 border-blue-200"
+        return "bg-blue-25 border-blue-200"
       case "quoted":
-        return "bg-amber-50 border-amber-200"
+        return "bg-amber-25 border-amber-200"
       case "accepted":
-        return "bg-green-50 border-green-200"
+        return "bg-green-25 border-green-200"
       case "lost_deal":
-        return "bg-red-50 border-red-200"
+        return "bg-red-25 border-red-200"
       default:
-        return "bg-gray-50 border-gray-200"
+        return "bg-gray-25 border-gray-200"
     }
   }
 
   // Value badge color based on amount
   const getValueColor = (value: number | null) => {
-    if (!value) return "bg-gray-100 text-gray-800 hover:bg-gray-200"
-    if (value >= 10000) return "bg-green-100 text-green-800 hover:bg-green-200"
-    if (value >= 5000) return "bg-blue-100 text-blue-800 hover:bg-blue-200"
-    return "bg-gray-100 text-gray-800 hover:bg-gray-200"
+    if (!value) return "bg-gray-25 text-gray-800 hover:bg-gray-50"
+    if (value >= 10000) return "bg-green-25 text-green-800 hover:bg-green-50"
+    if (value >= 5000) return "bg-blue-25 text-blue-800 hover:bg-blue-50"
+    return "bg-gray-25 text-gray-800 hover:bg-gray-50"
   }
 
   const statusColor = getStatusColor(opportunity.status)

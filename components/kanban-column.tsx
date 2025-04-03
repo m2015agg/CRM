@@ -14,15 +14,15 @@ export function KanbanColumn({ title, opportunities, droppableId, isLoading }: K
   const getColumnHeaderColor = (droppableId: string) => {
     switch (droppableId.toLowerCase()) {
       case "new":
-        return "bg-blue-100 text-blue-800 border-blue-200"
+        return "bg-blue-50 text-blue-800 border-blue-200"
       case "quoted":
-        return "bg-amber-100 text-amber-800 border-amber-200"
+        return "bg-amber-50 text-amber-800 border-amber-200"
       case "accepted":
-        return "bg-green-100 text-green-800 border-green-200"
+        return "bg-green-50 text-green-800 border-green-200"
       case "lost_deal":
-        return "bg-red-100 text-red-800 border-red-200"
+        return "bg-red-50 text-red-800 border-red-200"
       default:
-        return "bg-gray-100 text-gray-800 border-gray-200"
+        return "bg-gray-50 text-gray-800 border-gray-200"
     }
   }
 
@@ -30,15 +30,15 @@ export function KanbanColumn({ title, opportunities, droppableId, isLoading }: K
   const getColumnBgColor = (droppableId: string) => {
     switch (droppableId.toLowerCase()) {
       case "new":
-        return "bg-blue-50/50"
+        return "bg-blue-25"
       case "quoted":
-        return "bg-amber-50/50"
+        return "bg-amber-25"
       case "accepted":
-        return "bg-green-50/50"
+        return "bg-green-25"
       case "lost_deal":
-        return "bg-red-50/50"
+        return "bg-red-25"
       default:
-        return "bg-gray-50/50"
+        return "bg-gray-25"
     }
   }
 

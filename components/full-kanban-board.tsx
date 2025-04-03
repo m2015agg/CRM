@@ -10,14 +10,21 @@ import { supabase } from "@/lib/supabase/client"
 import type { User } from "@/types"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { OpportunityDialog } from "./opportunity-dialog"
+import { useAuth } from "@/hooks/use-auth"
 
 export function FullKanbanBoard() {
+  // Auth context to determine user role and permissions
+  const { userDetails } = useAuth()
+
+  // State for opportunities grouped by status
   const [opportunities, setOpportunities] = useState<Record<string, any[]>>({
     new: [],
     quoted: [],
     accepted: [],
     lost_deal: [],
   })
+
+  // State for user list and loading states
   const [users, setUsers] = useState<User[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingUsers, setIsLoadingUsers] = useState(true)
@@ -25,8 +32,10 @@ export function FullKanbanBoard() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
 
-  // Fetch users
+  // Fetch users - only for admin role
   useEffect(() => {
+    if (userDetails?.role !== "admin") return
+
     const fetchUsers = async () => {
       try {
         setIsLoadingUsers(true)
@@ -48,18 +57,22 @@ export function FullKanbanBoard() {
     }
 
     fetchUsers()
-  }, [])
+  }, [userDetails?.role])
 
+  // Fetch opportunities with role-based filtering
   const fetchOpportunities = useCallback(async () => {
     try {
       setIsLoading(true)
 
-      // Now fetch the actual data
+      // Base query for opportunities
       let query = supabase.from("opportunities").select("*").order("updated_at", { ascending: false })
 
-      if (selectedUser && selectedUser !== "all") {
-        // Use owner_id instead of user_id based on the opportunity service
+      // Role-based filtering
+      if (userDetails?.role === "admin" && selectedUser && selectedUser !== "all") {
         query = query.eq("owner_id", selectedUser)
+      } else if (userDetails?.role === "submitter") {
+        // Submitters only see their own opportunities
+        query = query.eq("owner_id", userDetails.id)
       }
 
       const { data, error } = await query
@@ -94,12 +107,12 @@ export function FullKanbanBoard() {
       setIsLoading(false)
       setIsRefreshing(false)
     }
-  }, [selectedUser])
+  }, [selectedUser, userDetails?.role, userDetails?.id])
 
+  // Set up real-time subscription for opportunity changes
   useEffect(() => {
     fetchOpportunities()
 
-    // Set up real-time subscription
     const subscription = supabase
       .channel("opportunities_changes")
       .on(
@@ -120,6 +133,7 @@ export function FullKanbanBoard() {
     }
   }, [fetchOpportunities])
 
+  // Handle drag and drop events
   const handleDragEnd = async (result: any) => {
     const { destination, source, draggableId } = result
 
@@ -174,48 +188,56 @@ export function FullKanbanBoard() {
     }
   }
 
+  // Refresh opportunities
   const handleRefresh = async () => {
     setIsRefreshing(true)
     await fetchOpportunities()
   }
 
+  // Open new opportunity dialog
   const handleNewOpportunity = () => {
     setIsDialogOpen(true)
   }
 
+  // Handle new opportunity creation
   const handleOpportunityCreated = () => {
     fetchOpportunities()
     toast.success("New opportunity created successfully!")
   }
 
-  // Create a custom UserSelector with users
-  const EnhancedUserSelector = () => (
-    <div className="w-64">
-      <Select value={selectedUser || "all"} onValueChange={setSelectedUser} disabled={isLoadingUsers}>
-        <SelectTrigger className="bg-background">
-          <SelectValue placeholder="Filter by user">
-            <div className="flex items-center">
-              <Filter className="w-4 h-4 mr-2" />
-              {selectedUser === "all"
-                ? "Everyone"
-                : users.find((u) => u.id === selectedUser)?.full_name || "Select user"}
-            </div>
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">Everyone</SelectItem>
-          {users.map((user) => (
-            <SelectItem key={user.id} value={user.id}>
-              {user.full_name || user.email}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  )
+  // User selector component - only visible to admins
+  const EnhancedUserSelector = () => {
+    if (userDetails?.role !== "admin") return null
+
+    return (
+      <div className="w-64">
+        <Select value={selectedUser || "all"} onValueChange={setSelectedUser} disabled={isLoadingUsers}>
+          <SelectTrigger className="bg-background">
+            <SelectValue placeholder="Filter by user">
+              <div className="flex items-center">
+                <Filter className="w-4 h-4 mr-2" />
+                {selectedUser === "all"
+                  ? "Everyone"
+                  : users.find((u) => u.id === selectedUser)?.full_name || "Select user"}
+              </div>
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Everyone</SelectItem>
+            {users.map((user) => (
+              <SelectItem key={user.id} value={user.id}>
+                {user.full_name || user.email}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
+      {/* Header section with gradient background */}
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg border border-blue-100 mb-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
@@ -241,8 +263,25 @@ export function FullKanbanBoard() {
         </div>
       </div>
 
+      {/* Kanban board grid layout */}
+      {/* 
+        To adjust the layout:
+        - grid-cols-1: Single column on mobile
+        - md:grid-cols-2: Two columns on medium screens
+        - lg:grid-cols-4: Four columns on large screens
+        - gap-4: Spacing between columns
+        To change card sizes, modify the KanbanColumn component
+      */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <DragDropContext onDragEnd={handleDragEnd}>
+          {/* 
+            KanbanColumn props:
+            - title: Column header text
+            - opportunities: Array of opportunities in this column
+            - droppableId: Unique ID for drag and drop
+            - isLoading: Loading state
+            To adjust card sizes, modify the KanbanColumn component
+          */}
           <KanbanColumn title="New Lead" opportunities={opportunities.new} droppableId="new" isLoading={isLoading} />
           <KanbanColumn
             title="Proposal Sent"

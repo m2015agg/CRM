@@ -363,3 +363,11 @@ export {
   ChartLegendContent,
   ChartStyle,
 }
+
+export const formatDate = (date) => {
+  // Your implementation here
+}
+
+export const getSupabaseClient = () => {
+  // Your implementation here
+}

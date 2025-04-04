@@ -130,7 +130,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data.session) {
-        router.push("/dashboard")
+        // Fetch user role to determine redirect path
+        const userData = await fetchUserRole(data.session.user.id)
+        
+        // Set the user data first
+        setUser({
+          ...data.session.user,
+          role: userData?.role,
+          full_name: userData?.full_name,
+          avatar_url: userData?.avatar_url,
+        })
+        setSession(data.session)
+
+        // Then redirect based on role
+        if (userData?.role === "admin") {
+          await router.push("/dashboard/admin")
+        } else {
+          await router.push("/dashboard/submitter")
+        }
       }
 
       return { error: null }

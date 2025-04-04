@@ -46,14 +46,14 @@ export default function SubmitterDashboardPage() {
     if (!isLoading) {
       if (!user) {
         console.log("No user found, redirecting to login")
-        router.push("/login")
+        router.replace("/login")
         return
       }
 
       console.log("User role:", user.role)
       if (user.role !== "submitter") {
-        console.log("User is not submitter, redirecting to dashboard")
-        router.push("/dashboard")
+        console.log("User is not submitter, redirecting to admin dashboard")
+        router.replace("/dashboard/admin")
         return
       }
     }

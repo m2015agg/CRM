@@ -1,10 +1,64 @@
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { Database } from "@/types/supabase"
+import { getSupabaseClient } from '@/lib/supabase/client'
 import { BaseService } from "./base-service"
-import type { Database } from "@/lib/database.types"
+import type { Database as DatabaseType } from "@/lib/database.types"
 import { deleteFile } from "@/lib/storage-utils"
 
 type CallNote = Database["public"]["Tables"]["call_notes"]["Row"]
 type CallNoteInsert = Database["public"]["Tables"]["call_notes"]["Insert"]
 type CallNoteUpdate = Database["public"]["Tables"]["call_notes"]["Update"]
+
+export const callNoteService = {
+  async getCallNote(id: string) {
+    const supabase = getSupabaseClient()
+    const { data, error } = await supabase
+      .from('call_notes')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (error) throw error
+    return data
+  },
+
+  async updateCallNote(id: string, updates: any) {
+    const supabase = getSupabaseClient()
+    const { data, error } = await supabase
+      .from('call_notes')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  },
+
+  async createCallNote(note: Omit<CallNote, "id" | "created_at" | "updated_at">) {
+    const supabase = getSupabaseClient()
+    const { data, error } = await supabase
+      .from("call_notes")
+      .insert([note])
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  },
+
+  async getCallNotesByUserId(userId: string) {
+    const supabase = getSupabaseClient()
+    const { data, error } = await supabase
+      .from("call_notes")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+
+    if (error) throw error
+    return data
+  }
+}
 
 export class CallNoteService extends BaseService {
   /**
@@ -274,5 +328,5 @@ export class CallNoteService extends BaseService {
 }
 
 // Export a singleton instance
-export const callNoteService = new CallNoteService()
+export const callNoteServiceInstance = new CallNoteService()
 

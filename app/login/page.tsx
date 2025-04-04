@@ -7,29 +7,30 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { useToast } from "@/components/ui/use-toast"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AlertCircle } from "lucide-react"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const { signIn } = useAuth()
   const router = useRouter()
-  const { toast } = useToast()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setError(null)
 
     try {
-      await signIn(email, password)
-      router.push("/")
+      const { error } = await signIn(email, password)
+      
+      if (error) {
+        setError(error.message)
+      }
     } catch (error) {
-      toast({
-        title: "Error signing in",
-        description: error instanceof Error ? error.message : "An error occurred",
-        variant: "destructive",
-      })
+      setError(error instanceof Error ? error.message : "An error occurred")
     } finally {
       setIsLoading(false)
     }
@@ -68,6 +69,12 @@ export default function LoginPage() {
                 required
               />
             </div>
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? "Signing in..." : "Sign in"}
             </Button>

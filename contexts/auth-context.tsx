@@ -15,7 +15,7 @@ interface AuthContext {
   user: UserWithRole | null
   session: Session | null
   isLoading: boolean
-  signIn: (email: string, password: string) => Promise<void>
+  signIn: (email: string, password: string) => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
 }
 
@@ -31,9 +31,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log("Fetching role for user:", userId)
       
-      // Log the exact query we're about to run
-      console.log("Running query: SELECT role, full_name, avatar_url FROM users WHERE id =", userId)
-      
       const { data, error } = await supabase
         .from("users")
         .select("role, full_name, avatar_url")
@@ -45,15 +42,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return null
       }
 
-      console.log("Raw query response:", { data, error })
-      console.log("Fetched user data:", data)
-      
       if (!data) {
         console.log("No data returned from query")
         return null
       }
 
-      console.log("User role from database:", data.role)
       return data
     } catch (error) {
       console.error("Error in fetchUserRole:", error)
@@ -68,22 +61,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log("Auth state changed:", event, session?.user?.id)
       if (session) {
         try {
-          // Set basic user data first
           setUser(session.user)
           setSession(session)
 
-          // Then try to fetch role data
           const userData = await fetchUserRole(session.user.id)
           if (userData) {
-            console.log("Setting user with role:", userData.role)
             setUser({
               ...session.user,
               role: userData.role,
               full_name: userData.full_name,
               avatar_url: userData.avatar_url,
             })
-          } else {
-            console.log("No role data found for user")
           }
         } catch (error) {
           console.error("Error in auth state change:", error)
@@ -97,29 +85,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false)
     })
 
-    // Initial session check
     const checkSession = async () => {
       try {
-        const { data: { session: currentSession } } = await supabase.auth.getSession()
-        console.log("Initial session check:", currentSession?.user?.id)
+        const { data: { session } } = await supabase.auth.getSession()
         
-        if (currentSession) {
-          // Set basic user data first
-          setUser(currentSession.user)
-          setSession(currentSession)
+        if (session) {
+          setUser(session.user)
+          setSession(session)
 
-          // Then try to fetch role data
-          const userData = await fetchUserRole(currentSession.user.id)
+          const userData = await fetchUserRole(session.user.id)
           if (userData) {
-            console.log("Setting initial user with role:", userData.role)
             setUser({
-              ...currentSession.user,
+              ...session.user,
               role: userData.role,
               full_name: userData.full_name,
               avatar_url: userData.avatar_url,
             })
-          } else {
-            console.log("No initial role data found for user")
           }
         }
       } catch (error) {
@@ -137,21 +118,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-    if (error) {
-      throw error
+      if (error) {
+        console.error("Sign in error:", error)
+        return { error }
+      }
+
+      if (data.session) {
+        router.push("/dashboard")
+      }
+
+      return { error: null }
+    } catch (error) {
+      console.error("Unexpected error during sign in:", error)
+      return { error: error as Error }
     }
-
-    router.refresh()
   }
 
   const signOut = async () => {
-    await supabase.auth.signOut()
-    router.refresh()
+    try {
+      await supabase.auth.signOut()
+      router.push("/login")
+    } catch (error) {
+      console.error("Error during sign out:", error)
+      router.push("/login")
+    }
   }
 
   return (

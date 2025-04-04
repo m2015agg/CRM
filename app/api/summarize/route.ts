@@ -2,30 +2,43 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import OpenAI from 'openai'
 
-if (!process.env.OPENAI_API_KEY) {
-  console.error('OpenAI API key is missing')
+// Check for required environment variables
+const requiredEnvVars = {
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY
 }
 
-if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error('Missing Supabase environment variables')
-}
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+// Log missing environment variables
+Object.entries(requiredEnvVars).forEach(([key, value]) => {
+  if (!value) {
+    console.error(`Missing required environment variable: ${key}`)
+  }
 })
 
+// Initialize Supabase client if environment variables are available
+const supabase = process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    )
+  : null
+
+// Initialize OpenAI client if API key is available
+const openai = process.env.OPENAI_API_KEY
+  ? new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
+  : null
+
 export async function POST(request: Request) {
-  console.log('Summarize API called')
-  
-  if (!process.env.OPENAI_API_KEY) {
-    console.error('OpenAI API key is missing')
+  // Check if all required environment variables are present
+  if (!supabase || !openai) {
     return NextResponse.json(
-      { error: 'OpenAI API key is not configured' },
+      { 
+        error: 'Server configuration error',
+        details: 'Required environment variables are missing'
+      },
       { status: 500 }
     )
   }

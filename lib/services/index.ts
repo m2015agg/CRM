@@ -4,6 +4,7 @@ export * from "./call-note-service"
 export * from "./expense-service"
 export * from "./user-service"
 export { callNoteService } from "./call-note-service"
+export { callNotesService } from './call-notes-service'
 
 
 

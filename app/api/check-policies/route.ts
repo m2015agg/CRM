@@ -15,48 +15,44 @@ export async function GET() {
       }
     )
 
-    // Test direct access to users table
-    const { data: users, error: usersError } = await supabaseAdmin
-      .from("users")
-      .select("*")
-      .limit(1)
-
-    if (usersError) {
-      console.error("RLS Check: Error accessing users table:", usersError)
-      return NextResponse.json({ 
-        error: "Failed to access users table",
-        details: usersError.message,
-        code: usersError.code
-      }, { status: 500 })
-    }
-
-    // Check RLS policies using a simpler query
+    // Get all policies for the users table
     const { data: policies, error: policiesError } = await supabaseAdmin
       .from("users")
       .select("id, role, full_name")
       .limit(1)
 
     if (policiesError) {
-      console.error("RLS Check: Error checking RLS policies:", policiesError)
+      console.error("Policy Check: Error checking policies:", policiesError)
       return NextResponse.json({ 
-        error: "Failed to check RLS policies",
+        error: "Failed to check policies",
         details: policiesError.message,
         code: policiesError.code
       }, { status: 500 })
     }
 
+    // Get the current RLS policies
+    const { data: rlsPolicies, error: rlsError } = await supabaseAdmin
+      .rpc('get_rls_policies', { table_name: 'users' })
+
+    if (rlsError) {
+      console.error("Policy Check: Error getting RLS policies:", rlsError)
+      return NextResponse.json({ 
+        error: "Failed to get RLS policies",
+        details: rlsError.message,
+        code: rlsError.code
+      }, { status: 500 })
+    }
+
     return NextResponse.json({
       success: true,
-      users: users,
-      policies: policies,
-      message: "RLS check completed successfully"
+      policies: rlsPolicies,
+      message: "Policy check completed successfully"
     })
   } catch (error) {
-    console.error("RLS Check: Unexpected error:", error)
+    console.error("Policy Check: Unexpected error:", error)
     return NextResponse.json({ 
       error: "Internal server error",
       details: error instanceof Error ? error.message : "Unknown error"
     }, { status: 500 })
   }
-}
-
+} 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useAuth } from "@/contexts/auth-context"
 import { useRouter } from "next/navigation"
-import { getSupabaseClient } from "@/lib/supabase/client"
+import { supabase } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { BackButton } from "@/components/back-button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -11,10 +11,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { User, UserPlus, Settings, Database, Shield, GitFork } from "lucide-react"
+import { User, Settings, Database, Shield, GitFork } from "lucide-react"
 import { StorageRLSGuide } from "@/components/storage-rls-guide"
 import { GitHubSetupGuide } from "@/components/github-setup-guide"
 import { GitWorkflowGuide } from "@/components/git-workflow-guide"
+import { AddUserDialog } from "@/components/add-user-dialog"
 
 export default function AdminConsolePage() {
   const { user, isLoading } = useAuth()
@@ -45,7 +46,6 @@ export default function AdminConsolePage() {
 
       try {
         setIsLoadingUsers(true)
-        const supabase = getSupabaseClient()
 
         const { data, error } = await supabase.from("users").select("*").order("created_at", { ascending: false })
 
@@ -102,10 +102,7 @@ export default function AdminConsolePage() {
                 <CardTitle>User Management</CardTitle>
                 <CardDescription>Manage user accounts and permissions</CardDescription>
               </div>
-              <Button>
-                <UserPlus className="h-4 w-4 mr-2" />
-                Add User
-              </Button>
+              <AddUserDialog />
             </CardHeader>
             <CardContent>
               <div className="rounded-md border">

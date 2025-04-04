@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts"
-import { getSupabaseClient } from "@/lib/supabase/client"
+import { supabase } from "@/lib/supabase/client"
 
 type OpportunityType = {
   type: string
@@ -15,9 +15,6 @@ export function Overview() {
 
   useEffect(() => {
     const fetchOpportunities = async () => {
-      const supabase = getSupabaseClient()
-      if (!supabase) return
-
       try {
         const { data: opportunities, error } = await supabase
           .from("opportunities")

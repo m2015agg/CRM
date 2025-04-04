@@ -8,7 +8,7 @@
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
-import { AuthLoadingScreen } from "@/components/auth-loading-screen"
+import { Loader2 } from "lucide-react"
 
 /**
  * DashboardPage Component
@@ -25,31 +25,39 @@ export default function DashboardPage() {
 
   // Effect hook to handle authentication and routing logic
   useEffect(() => {
-    // Only proceed if authentication check is complete
     if (!isLoading) {
-      // If no user is found, redirect to login page
       if (!user) {
-        console.log("No user found, redirecting to login")
-        router.push("/login")
-        return
-      }
-
-      // Log user information for debugging purposes
-      console.log("User found:", user.email, "Role:", user.role || "unknown")
-
-      // Role-based routing logic
-      // Admin users are directed to the admin dashboard
-      // Submitter users are directed to the submitter dashboard
-      if (user.role === "admin") {
-        router.push("/dashboard/admin")
+        router.replace("/login")
+      } else if (user.role === "admin") {
+        router.replace("/dashboard/admin")
       } else if (user.role === "submitter") {
-        router.push("/dashboard/submitter")
+        router.replace("/dashboard/submitter")
+      } else {
+        // If user has no role or an unknown role, show a message
+        console.log("User has no role or unknown role:", user.role)
       }
     }
   }, [user, isLoading, router]) // Dependencies array for useEffect
 
-  // Display loading screen while authentication is being checked
-  // This provides a better user experience during the authentication process
-  return <AuthLoadingScreen message="Preparing your dashboard..." />
+  // Show loading state while checking auth
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-2">Loading...</span>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return null
+  }
+
+  return (
+    <div className="flex h-screen items-center justify-center">
+      <Loader2 className="h-8 w-8 animate-spin" />
+      <span className="ml-2">Redirecting...</span>
+    </div>
+  )
 }
 

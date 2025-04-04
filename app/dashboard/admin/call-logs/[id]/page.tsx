@@ -5,14 +5,13 @@ import { useAuth } from "@/contexts/auth-context"
 import { useRouter, useParams } from "next/navigation"
 import { supabase } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { BackButton } from "@/components/back-button"
+import { BackButton } from "@/components/ui/back-button"
 import { AdminCallReportView } from "@/components/admin-call-report-view"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Printer, Sparkles } from "lucide-react"
-import { summarizeCallNotes } from "@/lib/openai"
 import { useToast } from "@/components/ui/use-toast"
 
 export default function CallLogDetailPage() {
@@ -83,28 +82,47 @@ export default function CallLogDetailPage() {
     fetchData()
   }, [user, isLoading, params.id])
 
-  const handleGenerateSummary = async () => {
-    if (!callNote) return
-
+  const generateSummary = async () => {
     try {
       setIsGeneratingSummary(true)
-      const summary = await summarizeCallNotes(callNote.id)
+      console.log('Starting summary generation for call note:', callNote.id)
       
-      // Update the local state with the new summary
+      const response = await fetch('/api/summarize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ callNoteId: callNote.id }),
+      })
+
+      console.log('API Response status:', response.status)
+      const data = await response.json()
+      console.log('API Response data:', data)
+
+      if (!response.ok) {
+        console.error('API Error:', data)
+        throw new Error(data.error || 'Failed to generate summary')
+      }
+
+      if (!data.summary) {
+        console.error('No summary in response:', data)
+        throw new Error('No summary was generated')
+      }
+
       setCallNote((prev: any) => ({
         ...prev,
-        summary
+        summary: data.summary
       }))
 
       toast({
-        title: "Summary Generated",
-        description: "The AI has generated a summary of the call notes.",
+        title: "Success",
+        description: "Summary generated successfully",
       })
     } catch (error) {
       console.error("Error generating summary:", error)
       toast({
         title: "Error",
-        description: "Failed to generate summary. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to generate summary. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -163,7 +181,7 @@ export default function CallLogDetailPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={handleGenerateSummary}
+            onClick={generateSummary}
             disabled={isGeneratingSummary}
             className="print:hidden"
           >

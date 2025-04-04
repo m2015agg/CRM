@@ -1,10 +1,9 @@
 "use client"
 
-import type React from "react"
 import { createContext, useContext, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabase/client"
 import type { User, Session } from "@supabase/supabase-js"
+import { supabase } from "@/lib/supabase/client"
 
 type UserWithRole = User & {
   role?: string
@@ -12,371 +11,154 @@ type UserWithRole = User & {
   avatar_url?: string | null
 }
 
-interface AuthContextType {
+interface AuthContext {
   user: UserWithRole | null
   session: Session | null
   isLoading: boolean
-  sessionStatus: "loading" | "authenticated" | "unauthenticated"
-  signIn: (
-    email: string,
-    password: string,
-  ) => Promise<{
-    error: Error | null
-  }>
+  signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
-
-// Local storage keys for caching user data
-const USER_CACHE_KEY = "auth:user-cache"
-const SESSION_CACHE_KEY = "auth:session-cache"
-const CACHE_EXPIRY_KEY = "auth:cache-expiry"
-const CACHE_DURATION = (4 * 60 * 60 * 1000) - (2 * 60 * 60 * 1000) // 2 hours before session expiry (default session is 4 hours)
-
-// Helper to save user data to local storage
-const cacheUserData = (user: UserWithRole | null, session: Session | null) => {
-  if (typeof window === "undefined") return
-
-  if (user && session) {
-    localStorage.setItem(USER_CACHE_KEY, JSON.stringify(user))
-    localStorage.setItem(SESSION_CACHE_KEY, JSON.stringify(session))
-    localStorage.setItem(CACHE_EXPIRY_KEY, String(Date.now() + CACHE_DURATION))
-  } else {
-    localStorage.removeItem(USER_CACHE_KEY)
-    localStorage.removeItem(SESSION_CACHE_KEY)
-    localStorage.removeItem(CACHE_EXPIRY_KEY)
-  }
-}
-
-// Helper to get cached user data
-const getCachedUserData = (): { user: UserWithRole | null; session: Session | null } => {
-  if (typeof window === "undefined") return { user: null, session: null }
-
-  try {
-    const expiryStr = localStorage.getItem(CACHE_EXPIRY_KEY)
-    if (!expiryStr) return { user: null, session: null }
-
-    const expiry = Number.parseInt(expiryStr, 10)
-    if (Date.now() > expiry) {
-      // Cache expired
-      localStorage.removeItem(USER_CACHE_KEY)
-      localStorage.removeItem(SESSION_CACHE_KEY)
-      localStorage.removeItem(CACHE_EXPIRY_KEY)
-      return { user: null, session: null }
-    }
-
-    const userStr = localStorage.getItem(USER_CACHE_KEY)
-    const sessionStr = localStorage.getItem(SESSION_CACHE_KEY)
-
-    if (!userStr || !sessionStr) return { user: null, session: null }
-
-    return {
-      user: JSON.parse(userStr) as UserWithRole,
-      session: JSON.parse(sessionStr) as Session,
-    }
-  } catch (error) {
-    console.error("Error reading user cache:", error)
-    return { user: null, session: null }
-  }
-}
+const AuthContext = createContext<AuthContext | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserWithRole | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [sessionStatus, setSessionStatus] = useState<"loading" | "authenticated" | "unauthenticated">("loading")
   const router = useRouter()
 
-  useEffect(() => {
-    let isMounted = true
-
-    const fetchSession = async () => {
-      try {
-        console.log("Auth context: Fetching session")
-        setIsLoading(true)
-        setSessionStatus("loading")
-
-        // Check for cached data first
-        // Retrieve cached user data from localStorage if available
-        // This helps improve performance by avoiding unnecessary API calls
-        const { user: cachedUser, session: cachedSession } = getCachedUserData()
-        
-        // Add session expiration check with detailed comments
-        if (cachedSession?.expires_at) {
-          // Convert current time to Unix timestamp (seconds) to match Supabase's format
-          const now = Math.floor(Date.now() / 1000)
-          
-          // Check if the session has expired
-          if (now >= cachedSession.expires_at) {
-            console.log("Auth context: Cached session has expired")
-            // Clear all cached data since it's no longer valid
-            cacheUserData(null, null)
-            // Reset user state
-            setUser(null)
-            // Reset session state
-            setSession(null)
-            // Redirect to login page
-            router.push('/login')
-            // Stop loading state
-            setIsLoading(false)
-            return
-          }
-          
-          // Log remaining session time for debugging
-          const remainingMinutes = Math.floor((cachedSession.expires_at - now) / 60)
-          console.log(`Auth context: Session expires in ${remainingMinutes} minutes`)
-        }
-
-        // Only use cached data if:
-        // 1. We have both user and session data
-        // 2. The component is still mounted (prevents memory leaks)
-        if (cachedUser && cachedSession && isMounted) {
-          console.log("Auth context: Using cached user data")
-          // Update state with cached data for immediate UI updates
-          setUser(cachedUser)
-          setSession(cachedSession)
-          // Don't set isLoading to false yet - we'll still verify with the server
-        }
-
-        // Get the current session
-        try {
-          const {
-            data: { session: currentSession },
-            error: sessionError,
-          } = await supabase.auth.getSession()
-
-          if (sessionError) {
-            console.error("Auth context: Error fetching session:", sessionError)
-            if (isMounted) setIsLoading(false)
-            return
-          }
-
-          if (!currentSession) {
-            console.log("Auth context: No session found")
-            if (isMounted) {
-              setSession(null)
-              setUser(null)
-              setSessionStatus("unauthenticated")
-              cacheUserData(null, null)
-              setIsLoading(false)
-            }
-            return
-          }
-
-          console.log("Auth context: Session found, user ID:", currentSession.user.id)
-          if (isMounted) {
-            setSession(currentSession)
-            setSessionStatus("authenticated")
-          }
-
-          // Fetch user data
-          try {
-            const { data: userData, error: userError } = await supabase
-              .from("users")
-              .select("role, full_name, avatar_url")
-              .eq("id", currentSession.user.id)
-              .single()
-
-            if (userError) {
-              console.error("Auth context: Error fetching user data:", userError)
-
-              // If we have cached data and there's a network error, use the cached data
-              if (cachedUser && cachedSession && isMounted) {
-                console.log("Auth context: Using cached user data due to fetch error")
-                // We already set the user from cache, just update loading state
-                setIsLoading(false)
-                return
-              }
-
-              if (isMounted) {
-                // Still set the basic user info even if we couldn't get the role
-                const basicUser = currentSession.user
-                setUser(basicUser)
-                cacheUserData(basicUser, currentSession)
-                setIsLoading(false)
-              }
-              return
-            }
-
-            if (userData && isMounted) {
-              console.log("Auth context: User data found, role:", userData.role)
-              const fullUser = {
-                ...currentSession.user,
-                role: userData.role,
-                full_name: userData.full_name,
-                avatar_url: userData.avatar_url,
-              }
-              setUser(fullUser)
-              cacheUserData(fullUser, currentSession)
-              setIsLoading(false)
-            }
-          } catch (err) {
-            console.error("Auth context: Error in user data fetch:", err)
-
-            // If we have cached data and there's a network error, use the cached data
-            if (cachedUser && cachedSession && isMounted) {
-              console.log("Auth context: Using cached user data due to fetch error")
-              // We already set the user from cache, just update loading state
-              setIsLoading(false)
-              return
-            }
-
-            if (isMounted) {
-              // Still set the basic user info even if we couldn't get the role
-              const basicUser = currentSession.user
-              setUser(basicUser)
-              cacheUserData(basicUser, currentSession)
-              setIsLoading(false)
-            }
-          }
-        } catch (err) {
-          console.error("Auth context: Error in session fetch:", err)
-
-          // If we have cached data and there's a network error, use the cached data
-          if (cachedUser && cachedSession && isMounted) {
-            console.log("Auth context: Using cached user data due to fetch error")
-            // We already set the user from cache, just update loading state
-            setIsLoading(false)
-          } else if (isMounted) {
-            setIsLoading(false)
-          }
-        }
-      } catch (err) {
-        console.error("Auth context: Unexpected error in fetchSession:", err)
-        if (isMounted) setIsLoading(false)
-      }
-    }
-
-    fetchSession()
-
-    // Set up auth state change listener
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-      console.log("Auth context: Auth state changed:", event)
-
-      if (isMounted) setSession(newSession)
-
-      if (!newSession) {
-        if (isMounted) {
-          setUser(null)
-          cacheUserData(null, null)
-        }
-        return
-      }
-
-      try {
-        // Fetch user role from the users table
-        const { data: userData, error: userError } = await supabase
-          .from("users")
-          .select("role, full_name, avatar_url")
-          .eq("id", newSession.user.id)
-          .single()
-
-        if (userError) {
-          console.error("Auth context: Error fetching user data on auth change:", userError)
-          if (isMounted) {
-            const basicUser = newSession.user
-            setUser(basicUser)
-            cacheUserData(basicUser, newSession)
-          }
-        } else if (userData && isMounted) {
-          const fullUser = {
-            ...newSession.user,
-            role: userData.role,
-            full_name: userData.full_name,
-            avatar_url: userData.avatar_url,
-          }
-          setUser(fullUser)
-          cacheUserData(fullUser, newSession)
-        }
-      } catch (err) {
-        console.error("Auth context: Unexpected error in auth change handler:", err)
-        if (isMounted) {
-          const basicUser = newSession.user
-          setUser(basicUser)
-          cacheUserData(basicUser, newSession)
-        }
-      }
-    })
-
-    // Cleanup function
-    return () => {
-      isMounted = false
-      subscription.unsubscribe()
-    }
-  }, [router])
-
-  const signIn = async (email: string, password: string) => {
-    console.log("Auth context: Attempting to sign in with email:", email)
-
+  const fetchUserRole = async (userId: string) => {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
+      console.log("Fetching role for user:", userId)
+      
+      // Log the exact query we're about to run
+      console.log("Running query: SELECT role, full_name, avatar_url FROM users WHERE id =", userId)
+      
+      const { data, error } = await supabase
+        .from("users")
+        .select("role, full_name, avatar_url")
+        .eq("id", userId)
+        .maybeSingle()
 
       if (error) {
-        console.error("Auth context: Sign in error:", error)
-        return { error }
+        console.error("Error fetching user role:", error)
+        return null
       }
 
-      console.log("Auth context: Sign in successful, session:", data.session ? "exists" : "null")
-      return { error: null }
-    } catch (err) {
-      console.error("Auth context: Unexpected error during sign in:", err)
-      return { error: err as Error }
+      console.log("Raw query response:", { data, error })
+      console.log("Fetched user data:", data)
+      
+      if (!data) {
+        console.log("No data returned from query")
+        return null
+      }
+
+      console.log("User role from database:", data.role)
+      return data
+    } catch (error) {
+      console.error("Error in fetchUserRole:", error)
+      return null
     }
+  }
+
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("Auth state changed:", event, session?.user?.id)
+      if (session) {
+        try {
+          // Set basic user data first
+          setUser(session.user)
+          setSession(session)
+
+          // Then try to fetch role data
+          const userData = await fetchUserRole(session.user.id)
+          if (userData) {
+            console.log("Setting user with role:", userData.role)
+            setUser({
+              ...session.user,
+              role: userData.role,
+              full_name: userData.full_name,
+              avatar_url: userData.avatar_url,
+            })
+          } else {
+            console.log("No role data found for user")
+          }
+        } catch (error) {
+          console.error("Error in auth state change:", error)
+          setUser(session.user)
+          setSession(session)
+        }
+      } else {
+        setUser(null)
+        setSession(null)
+      }
+      setIsLoading(false)
+    })
+
+    // Initial session check
+    const checkSession = async () => {
+      try {
+        const { data: { session: currentSession } } = await supabase.auth.getSession()
+        console.log("Initial session check:", currentSession?.user?.id)
+        
+        if (currentSession) {
+          // Set basic user data first
+          setUser(currentSession.user)
+          setSession(currentSession)
+
+          // Then try to fetch role data
+          const userData = await fetchUserRole(currentSession.user.id)
+          if (userData) {
+            console.log("Setting initial user with role:", userData.role)
+            setUser({
+              ...currentSession.user,
+              role: userData.role,
+              full_name: userData.full_name,
+              avatar_url: userData.avatar_url,
+            })
+          } else {
+            console.log("No initial role data found for user")
+          }
+        }
+      } catch (error) {
+        console.error("Error in initial session check:", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    checkSession()
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  const signIn = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) {
+      throw error
+    }
+
+    router.refresh()
   }
 
   const signOut = async () => {
-    console.log("Auth context: Signing out")
-
-    try {
-      // First, clear the local state
-      setUser(null)
-      setSession(null)
-
-      // Clear cached user data
-      cacheUserData(null, null)
-
-      // Clear any other auth-related items in localStorage
-      if (typeof window !== "undefined") {
-        // Clear any Supabase-specific items
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i)
-          if (key && (key.startsWith("sb-") || key.includes("supabase"))) {
-            localStorage.removeItem(key)
-          }
-        }
-      }
-
-      // Sign out from Supabase
-      const { error } = await supabase.auth.signOut()
-      if (error) {
-        console.error("Auth context: Error during sign out from Supabase:", error)
-      }
-
-      // Force a page reload to clear any in-memory state
-      if (typeof window !== "undefined") {
-        window.location.href = "/login"
-      } else {
-        router.push("/login")
-      }
-    } catch (err) {
-      console.error("Auth context: Error during sign out:", err)
-
-      // Even if there's an error, clear the user state and redirect
-      if (typeof window !== "undefined") {
-        window.location.href = "/login"
-      } else {
-        router.push("/login")
-      }
-    }
+    await supabase.auth.signOut()
+    router.refresh()
   }
 
-  return <AuthContext.Provider value={{ user, session, isLoading, sessionStatus, signIn, signOut }}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider value={{ user, session, isLoading, signIn, signOut }}>
+      {children}
+    </AuthContext.Provider>
+  )
 }
 
 export const useAuth = () => {

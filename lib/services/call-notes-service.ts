@@ -2,6 +2,7 @@ import { format } from "date-fns"
 import { deleteFile } from "@/lib/storage-utils"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Database } from "@/types/supabase"
+import { getSupabaseClient } from '@/lib/supabase/client'
 
 type CallNote = Database["public"]["Tables"]["call_notes"]["Row"]
 type CallNoteInsert = Database["public"]["Tables"]["call_notes"]["Insert"]
@@ -351,6 +352,31 @@ export const callNotesService = {
 
     return result
   },
+
+  async getCallNote(id: string) {
+    const supabase = getSupabaseClient()
+    const { data, error } = await supabase
+      .from('call_notes')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (error) throw error
+    return data
+  },
+
+  async updateCallNote(id: string, updates: any) {
+    const supabase = getSupabaseClient()
+    const { data, error } = await supabase
+      .from('call_notes')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  }
 }
 
 /**

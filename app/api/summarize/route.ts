@@ -3,12 +3,16 @@ import { createClient } from '@supabase/supabase-js'
 import OpenAI from 'openai'
 
 if (!process.env.OPENAI_API_KEY) {
-  console.error('OPENAI_API_KEY is not set')
+  console.error('OpenAI API key is missing')
+}
+
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  throw new Error('Missing Supabase environment variables')
 }
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
 const openai = new OpenAI({

@@ -22,14 +22,19 @@ export default function LoginPage() {
     e.preventDefault()
     setIsLoading(true)
     setError(null)
+    console.log("Attempting to sign in with email:", email)
 
     try {
       const { error } = await signIn(email, password)
       
       if (error) {
+        console.error("Sign in error:", error)
         setError(error.message)
+      } else {
+        console.log("Sign in successful")
       }
     } catch (error) {
+      console.error("Unexpected error during sign in:", error)
       setError(error instanceof Error ? error.message : "An error occurred")
     } finally {
       setIsLoading(false)

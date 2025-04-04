@@ -81,6 +81,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setUser(null)
         setSession(null)
+        // Redirect to login if not on login page
+        if (window.location.pathname !== "/login") {
+          router.push("/login")
+        }
       }
       setIsLoading(false)
     })
@@ -102,6 +106,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               avatar_url: userData.avatar_url,
             })
           }
+        } else {
+          // Redirect to login if not on login page
+          if (window.location.pathname !== "/login") {
+            router.push("/login")
+          }
         }
       } catch (error) {
         console.error("Error in initial session check:", error)
@@ -115,7 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       subscription.unsubscribe()
     }
-  }, [])
+  }, [router])
 
   const signIn = async (email: string, password: string) => {
     try {
@@ -133,24 +142,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Fetch user role to determine redirect path
         const userData = await fetchUserRole(data.session.user.id)
         
+        if (!userData) {
+          console.error("No user data found after sign in")
+          return { error: new Error("Failed to fetch user role") }
+        }
+        
         // Set the user data first
         setUser({
           ...data.session.user,
-          role: userData?.role,
-          full_name: userData?.full_name,
-          avatar_url: userData?.avatar_url,
+          role: userData.role,
+          full_name: userData.full_name,
+          avatar_url: userData.avatar_url,
         })
         setSession(data.session)
 
         // Then redirect based on role
-        if (userData?.role === "admin") {
-          await router.push("/dashboard/admin")
+        if (userData.role === "admin") {
+          router.push("/dashboard/admin")
         } else {
-          await router.push("/dashboard/submitter")
+          router.push("/dashboard/submitter")
         }
+
+        return { error: null }
       }
 
-      return { error: null }
+      return { error: new Error("No session after sign in") }
     } catch (error) {
       console.error("Unexpected error during sign in:", error)
       return { error: error as Error }
@@ -160,6 +176,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     try {
       await supabase.auth.signOut()
+      setUser(null)
+      setSession(null)
       router.push("/login")
     } catch (error) {
       console.error("Error during sign out:", error)

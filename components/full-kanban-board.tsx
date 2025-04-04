@@ -10,54 +10,25 @@ import { supabase } from "@/lib/supabase/client"
 import type { User } from "@/types"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { OpportunityDialog } from "./opportunity-dialog"
-import { useAuth } from "@/hooks/use-auth"
+import { useAuth } from "@/contexts/auth-context"
+import { useToast } from "@/components/ui/use-toast"
+import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { formatCurrency } from "@/lib/utils"
 
 export function FullKanbanBoard() {
-  // Auth context to determine user role and permissions
-  const { userDetails } = useAuth()
-
-  // State for opportunities grouped by status
+  const { user } = useAuth()
   const [opportunities, setOpportunities] = useState<Record<string, any[]>>({
     new: [],
     quoted: [],
     accepted: [],
     lost_deal: [],
   })
-
-  // State for user list and loading states
-  const [users, setUsers] = useState<User[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [isLoadingUsers, setIsLoadingUsers] = useState(true)
-  const [selectedUser, setSelectedUser] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<string>("all")
+  const { toast } = useToast()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-
-  // Fetch users - only for admin role
-  useEffect(() => {
-    if (userDetails?.role !== "admin") return
-
-    const fetchUsers = async () => {
-      try {
-        setIsLoadingUsers(true)
-
-        const { data, error } = await supabase
-          .from("users")
-          .select("id, email, full_name, role")
-          .order("full_name", { ascending: true })
-
-        if (error) throw error
-
-        setUsers(data || [])
-      } catch (err: any) {
-        console.error("Error fetching users:", err.message)
-        toast.error("Failed to load users")
-      } finally {
-        setIsLoadingUsers(false)
-      }
-    }
-
-    fetchUsers()
-  }, [userDetails?.role])
 
   // Fetch opportunities with role-based filtering
   const fetchOpportunities = useCallback(async () => {
@@ -68,11 +39,11 @@ export function FullKanbanBoard() {
       let query = supabase.from("opportunities").select("*").order("updated_at", { ascending: false })
 
       // Role-based filtering
-      if (userDetails?.role === "admin" && selectedUser && selectedUser !== "all") {
+      if (user?.role === "admin" && selectedUser && selectedUser !== "all") {
         query = query.eq("owner_id", selectedUser)
-      } else if (userDetails?.role === "submitter") {
+      } else if (user?.role === "submitter") {
         // Submitters only see their own opportunities
-        query = query.eq("owner_id", userDetails.id)
+        query = query.eq("owner_id", user.id)
       }
 
       const { data, error } = await query
@@ -102,12 +73,16 @@ export function FullKanbanBoard() {
       setOpportunities(grouped)
     } catch (error) {
       console.error("Error fetching opportunities:", error)
-      toast.error("Failed to load opportunities")
+      toast({
+        title: "Error",
+        description: "Failed to load opportunities",
+        variant: "destructive",
+      })
     } finally {
       setIsLoading(false)
       setIsRefreshing(false)
     }
-  }, [selectedUser, userDetails?.role, userDetails?.id])
+  }, [selectedUser, user?.role, user?.id, toast])
 
   // Set up real-time subscription for opportunity changes
   useEffect(() => {
@@ -189,9 +164,9 @@ export function FullKanbanBoard() {
   }
 
   // Refresh opportunities
-  const handleRefresh = async () => {
+  const handleRefresh = () => {
     setIsRefreshing(true)
-    await fetchOpportunities()
+    fetchOpportunities()
   }
 
   // Open new opportunity dialog
@@ -205,32 +180,10 @@ export function FullKanbanBoard() {
     toast.success("New opportunity created successfully!")
   }
 
-  // User selector component - only visible to admins
-  const EnhancedUserSelector = () => {
-    if (userDetails?.role !== "admin") return null
-
+  if (!user) {
     return (
-      <div className="w-64">
-        <Select value={selectedUser || "all"} onValueChange={setSelectedUser} disabled={isLoadingUsers}>
-          <SelectTrigger className="bg-background">
-            <SelectValue placeholder="Filter by user">
-              <div className="flex items-center">
-                <Filter className="w-4 h-4 mr-2" />
-                {selectedUser === "all"
-                  ? "Everyone"
-                  : users.find((u) => u.id === selectedUser)?.full_name || "Select user"}
-              </div>
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Everyone</SelectItem>
-            {users.map((user) => (
-              <SelectItem key={user.id} value={user.id}>
-                {user.full_name || user.email}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="p-4 text-red-500">
+        You must be logged in to view opportunities.
       </div>
     )
   }
@@ -245,15 +198,25 @@ export function FullKanbanBoard() {
             <p className="text-blue-700">Manage and track opportunities through the sales pipeline</p>
           </div>
           <div className="flex items-center gap-2 self-end sm:self-auto">
-            <EnhancedUserSelector />
+            {user.role === "admin" && (
+              <Select value={selectedUser} onValueChange={setSelectedUser}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Filter by user" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Users</SelectItem>
+                  {/* Add user options here */}
+                </SelectContent>
+              </Select>
+            )}
             <Button
               variant="outline"
-              size="icon"
+              size="sm"
               onClick={handleRefresh}
               disabled={isRefreshing}
-              className="bg-white hover:bg-blue-50"
             >
-              <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
+              Refresh
             </Button>
             <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleNewOpportunity}>
               <Plus className="h-4 w-4 mr-2" />

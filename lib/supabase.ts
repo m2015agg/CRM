@@ -1,31 +1,11 @@
-import { createClient } from "@supabase/supabase-js"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import type { Database } from "@/types/supabase"
 
-// Create a single instance of the Supabase client
-let supabaseInstance: ReturnType<typeof createClient> | null = null
+// Create a single instance of the Supabase client for the entire application
+export const supabase = createClientComponentClient<Database>()
 
+// For cases where we need to get a fresh instance (should be rare)
 export function getSupabase() {
-  if (!supabaseInstance) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-    console.log("Supabase URL:", supabaseUrl)
-    console.log("Supabase Key:", supabaseKey ? "Present" : "Missing")
-
-    if (!supabaseUrl || !supabaseKey) {
-      throw new Error("Missing Supabase environment variables")
-    }
-
-    supabaseInstance = createClient(supabaseUrl, supabaseKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-      },
-    })
-  }
-
-  return supabaseInstance
+  return supabase
 }
-
-// For backward compatibility
-export const supabase = getSupabase()
 

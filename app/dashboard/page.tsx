@@ -9,6 +9,7 @@ import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
 import { Loader2 } from "lucide-react"
+import { DebugOpportunities } from "@/components/debug-opportunities"
 
 /**
  * DashboardPage Component
@@ -54,9 +55,9 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex h-screen items-center justify-center">
-      <Loader2 className="h-8 w-8 animate-spin" />
-      <span className="ml-2">Redirecting...</span>
+    <div className="container mx-auto py-6 space-y-6">
+      <h1 className="text-3xl font-bold">Dashboard</h1>
+      <DebugOpportunities />
     </div>
   )
 }

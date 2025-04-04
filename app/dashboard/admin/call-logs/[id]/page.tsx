@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/auth-context"
 import { useRouter, useParams } from "next/navigation"
 import { supabase } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { BackButton } from "@/components/ui/back-button"
+import { BackButton } from "@/components/back-button"
 import { AdminCallReportView } from "@/components/admin-call-report-view"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -13,6 +13,7 @@ import { AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Printer, Sparkles } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
+import { Loader2 } from "lucide-react"
 
 export default function CallLogDetailPage() {
   const { user, isLoading } = useAuth()

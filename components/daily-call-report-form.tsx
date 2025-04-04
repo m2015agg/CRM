@@ -18,6 +18,7 @@ import { useAuth } from "@/contexts/auth-context"
 import { SimplifiedFileUpload } from "@/components/simplified-file-upload"
 import { FilePreview } from "@/components/file-preview"
 import { supabase } from "@/lib/supabase"
+import { Textarea } from "@/components/ui/textarea"
 
 // Custom date formatting function to replace date-fns
 function formatDate(date: Date, formatStr: string): string {
@@ -60,8 +61,8 @@ function formatDate(date: Date, formatStr: string): string {
 
 // Define the form schema for a single call
 const callSchema = z.object({
-  id: z.string().optional(), // Add ID field to track existing records
-  clientName: z.string().min(1, "Client name is required"),
+  id: z.string().optional(),
+  customerName: z.string().min(1, "Customer name is required"),
   contactName: z.string().optional(),
   locationType: z.string().optional(),
   notes: z.string().min(1, "Notes are required"),
@@ -137,7 +138,7 @@ export function DailyCallReportForm({
       reportDate: date,
       mileage: 0,
       comments: "",
-      calls: [{ clientName: "", contactName: "", locationType: "", notes: "" }],
+      calls: [{ customerName: "", contactName: "", locationType: "", notes: "" }],
       expenses: [],
     },
     mode: "onBlur", // Add this to reduce unnecessary re-renders
@@ -203,13 +204,13 @@ export function DailyCallReportForm({
             // Transform the database response into the form's expected format
             const formattedCalls = calls.map((call: { 
               id: string;
-              client_name: string;      // Database column name
+              customer_name: string;      // Database column name
               contact_name: string | null;
               location_type: string | null;
               notes: string;
             }) => ({
               id: call.id,
-              clientName: call.client_name || "",      // Form field name (camelCase)
+              customerName: call.customer_name || "",      // Form field name (camelCase)
               contactName: call.contact_name || "",
               locationType: call.location_type || "",
               notes: call.notes || "",
@@ -220,7 +221,7 @@ export function DailyCallReportForm({
           } else {
             console.log("No existing calls found or calls array is empty")
             replaceCalls([{
-              clientName: "",
+              customerName: "",
               contactName: "",
               locationType: "",
               notes: ""
@@ -269,7 +270,7 @@ export function DailyCallReportForm({
           // If no report exists, initialize with empty form
           console.log("No existing report found for date:", formattedDate)
           replaceCalls([{
-            clientName: "",
+            customerName: "",
             contactName: "",
             locationType: "",
             notes: ""
@@ -378,7 +379,7 @@ export function DailyCallReportForm({
           // If the call has an ID, update it; otherwise create a new one
           if (call.id) {
             return await updateCallNote(call.id, {
-              client_name: call.clientName,
+              customer_name: call.customerName,
               contact_name: call.contactName || null,
               location_type: call.locationType || null,
               notes: call.notes,
@@ -386,7 +387,7 @@ export function DailyCallReportForm({
             })
           } else {
             return await createCallNote({
-              client_name: call.clientName,
+              customer_name: call.customerName,
               contact_name: call.contactName || null,
               location_type: call.locationType || null,
               call_date: formattedDate,
@@ -570,10 +571,10 @@ export function DailyCallReportForm({
                   <table className="w-full border-collapse">
                     <thead>
                       <tr className="border-b">
-                        <th className="text-left py-2 px-1 font-medium text-sm">Client Name</th>
-                        <th className="text-left py-2 px-1 font-medium text-sm">Contact Name</th>
-                        <th className="text-left py-2 px-1 font-medium text-sm">Location Type</th>
-                        <th className="text-left py-2 px-1 font-medium text-sm">Notes</th>
+                        <th className="text-left py-2 px-1 font-medium text-sm w-[200px]">Customer Name</th>
+                        <th className="text-left py-2 px-1 font-medium text-sm w-[200px]">Contact Name</th>
+                        <th className="text-left py-2 px-1 font-medium text-sm w-[150px]">Location Type</th>
+                        <th className="text-left py-2 px-1 font-medium text-sm w-[400px]">Notes</th>
                         <th className="w-10"></th>
                       </tr>
                     </thead>
@@ -585,11 +586,11 @@ export function DailyCallReportForm({
                             <input type="hidden" {...form.register(`calls.${index}.id`)} />
                             <FormField
                               control={form.control}
-                              name={`calls.${index}.clientName`}
+                              name={`calls.${index}.customerName`}
                               render={({ field }) => (
                                 <FormItem className="m-0 space-y-0">
                                   <FormControl>
-                                    <Input placeholder="Client Name" {...field} className="h-9" />
+                                    <Input placeholder="Customer Name" {...field} className="h-9 w-[200px]" />
                                   </FormControl>
                                   <FormMessage className="text-xs" />
                                 </FormItem>
@@ -603,7 +604,7 @@ export function DailyCallReportForm({
                               render={({ field }) => (
                                 <FormItem className="m-0 space-y-0">
                                   <FormControl>
-                                    <Input placeholder="Contact Name" {...field} className="h-9" />
+                                    <Input placeholder="Contact Name" {...field} className="h-9 w-[200px]" />
                                   </FormControl>
                                   <FormMessage className="text-xs" />
                                 </FormItem>
@@ -617,7 +618,7 @@ export function DailyCallReportForm({
                               render={({ field }) => (
                                 <FormItem className="m-0 space-y-0">
                                   <FormControl>
-                                    <Input placeholder="Location Type" {...field} className="h-9" />
+                                    <Input placeholder="Location Type" {...field} className="h-9 w-[150px]" />
                                   </FormControl>
                                   <FormMessage className="text-xs" />
                                 </FormItem>
@@ -631,7 +632,12 @@ export function DailyCallReportForm({
                               render={({ field }) => (
                                 <FormItem className="m-0 space-y-0">
                                   <FormControl>
-                                    <Input placeholder="Notes" {...field} className="h-9" />
+                                    <Textarea 
+                                      placeholder="Notes" 
+                                      {...field} 
+                                      className="min-h-[100px] w-[400px] resize-y" 
+                                      style={{ whiteSpace: 'pre-wrap' }}
+                                    />
                                   </FormControl>
                                   <FormMessage className="text-xs" />
                                 </FormItem>
@@ -659,7 +665,7 @@ export function DailyCallReportForm({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => appendCall({ clientName: "", contactName: "", locationType: "", notes: "" })}
+                  onClick={() => appendCall({ customerName: "", contactName: "", locationType: "", notes: "" })}
                 >
                   Add Call
                 </Button>

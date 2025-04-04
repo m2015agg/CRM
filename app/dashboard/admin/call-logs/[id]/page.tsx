@@ -2,22 +2,28 @@
 
 import { useEffect, useState } from "react"
 import { useAuth } from "@/contexts/auth-context"
-import { useRouter } from "next/navigation"
-import { getSupabaseClient } from "@/lib/supabase/client"
+import { useRouter, useParams } from "next/navigation"
+import { supabase } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { BackButton } from "@/components/back-button"
-import { format, parseISO } from "date-fns"
-import { FilePreview } from "@/components/file-preview"
+import { AdminCallReportView } from "@/components/admin-call-report-view"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, User, Calendar, Building, MapPin } from "lucide-react"
+import { AlertCircle } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Printer, Sparkles } from "lucide-react"
+import { summarizeCallNotes } from "@/lib/openai"
+import { useToast } from "@/components/ui/use-toast"
 
-export default function CallLogDetailPage({ params }: { params: { id: string } }) {
+export default function CallLogDetailPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
+  const params = useParams()
+  const { toast } = useToast()
   const [callNote, setCallNote] = useState<any>(null)
-  const [submitter, setSubmitter] = useState<any>(null)
+  const [expenses, setExpenses] = useState<any[]>([])
   const [isLoadingNote, setIsLoadingNote] = useState(true)
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -38,15 +44,14 @@ export default function CallLogDetailPage({ params }: { params: { id: string } }
   }, [user, isLoading, router])
 
   useEffect(() => {
-    const fetchCallNote = async () => {
+    const fetchData = async () => {
       if (isLoading || !user || user.role !== "admin") return
 
       try {
         setIsLoadingNote(true)
-        const supabase = getSupabaseClient()
 
         // Fetch call note with user details
-        const { data, error } = await supabase
+        const { data: callData, error: callError } = await supabase
           .from("call_notes")
           .select(`
             *,
@@ -55,20 +60,57 @@ export default function CallLogDetailPage({ params }: { params: { id: string } }
           .eq("id", params.id)
           .single()
 
-        if (error) throw error
+        if (callError) throw callError
 
-        setCallNote(data)
-        setSubmitter(data.users)
+        // Fetch expenses for this call's daily report
+        const { data: expenseData, error: expenseError } = await supabase
+          .from("expenses")
+          .select("*")
+          .eq("daily_reports_uuid", callData.daily_reports_uuid)
+
+        if (expenseError) throw expenseError
+
+        setCallNote(callData)
+        setExpenses(expenseData || [])
       } catch (err) {
-        console.error("Error fetching call note:", err)
-        setError(err instanceof Error ? err.message : "Failed to load call note")
+        console.error("Error fetching data:", err)
+        setError(err instanceof Error ? err.message : "Failed to load data")
       } finally {
         setIsLoadingNote(false)
       }
     }
 
-    fetchCallNote()
+    fetchData()
   }, [user, isLoading, params.id])
+
+  const handleGenerateSummary = async () => {
+    if (!callNote) return
+
+    try {
+      setIsGeneratingSummary(true)
+      const summary = await summarizeCallNotes(callNote.id)
+      
+      // Update the local state with the new summary
+      setCallNote((prev: any) => ({
+        ...prev,
+        summary
+      }))
+
+      toast({
+        title: "Summary Generated",
+        description: "The AI has generated a summary of the call notes.",
+      })
+    } catch (error) {
+      console.error("Error generating summary:", error)
+      toast({
+        title: "Error",
+        description: "Failed to generate summary. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsGeneratingSummary(false)
+    }
+  }
 
   if (isLoading || isLoadingNote) {
     return (
@@ -100,11 +142,11 @@ export default function CallLogDetailPage({ params }: { params: { id: string } }
       <div className="space-y-6">
         <div className="flex items-center gap-2">
           <BackButton href="/dashboard/admin/call-logs" />
-          <h1 className="text-2xl font-bold tracking-tight">Call Note Details</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Call Log Details</h1>
         </div>
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error || "Call note not found"}</AlertDescription>
+          <AlertDescription>{error || "Call log not found"}</AlertDescription>
         </Alert>
       </div>
     )
@@ -112,74 +154,62 @@ export default function CallLogDetailPage({ params }: { params: { id: string } }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <BackButton href="/dashboard/admin/call-logs" />
-        <h1 className="text-2xl font-bold tracking-tight">Call Note Details</h1>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <BackButton href="/dashboard/admin/call-logs" />
+          <h1 className="text-2xl font-bold tracking-tight">Call Log Details</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleGenerateSummary}
+            disabled={isGeneratingSummary}
+            className="print:hidden"
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            {isGeneratingSummary ? "Generating..." : "Generate Summary"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.print()}
+            className="print:hidden"
+          >
+            <Printer className="h-4 w-4 mr-2" />
+            Print Report
+          </Button>
+        </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>{callNote.client_name}</CardTitle>
-          <CardDescription>Call note from {format(parseISO(callNote.call_date), "MMMM d, yyyy")}</CardDescription>
+          <CardTitle>Call Information</CardTitle>
+          <CardDescription>View call details and print report</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <User className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Submitted by:</span>
-                <span className="text-sm">{submitter?.full_name || "Unknown"}</span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Date:</span>
-                <span className="text-sm">{format(parseISO(callNote.call_date), "MMMM d, yyyy")}</span>
-              </div>
-
-              {callNote.contact_name && (
-                <div className="flex items-center gap-2">
-                  <User className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Contact:</span>
-                  <span className="text-sm">{callNote.contact_name}</span>
-                </div>
-              )}
-
-              {callNote.location_type && (
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Location Type:</span>
-                  <span className="text-sm">{callNote.location_type}</span>
-                </div>
-              )}
-
-              {callNote.client_name && (
-                <div className="flex items-center gap-2">
-                  <Building className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Client:</span>
-                  <span className="text-sm">{callNote.client_name}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <h3 className="text-lg font-medium">Notes</h3>
-            <div className="p-4 bg-muted/30 rounded-md">
-              <p className="whitespace-pre-wrap">{callNote.notes}</p>
-            </div>
-          </div>
-
-          {callNote.attachments && callNote.attachments.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Attachments</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {callNote.attachments.map((url: string, index: number) => (
-                  <FilePreview key={index} url={url} showRemoveButton={false} />
-                ))}
-              </div>
-            </div>
-          )}
+        <CardContent>
+          <AdminCallReportView
+            date={new Date(callNote.call_date)}
+            calls={[{
+              id: callNote.id,
+              customer_name: callNote.customer_name,
+              contact_name: callNote.contact_name,
+              location_type: callNote.location_type,
+              notes: callNote.notes,
+              attachments: callNote.attachments,
+              summary: callNote.summary
+            }]}
+            expenses={expenses.map(expense => ({
+              id: expense.id,
+              expense_type: expense.expense_type,
+              amount: expense.amount,
+              description: expense.description,
+              receipt_url: expense.receipt_url
+            }))}
+            submitterName={callNote.users?.full_name || "Unknown"}
+            mileage={callNote.mileage}
+            comments={callNote.comments}
+          />
         </CardContent>
       </Card>
     </div>

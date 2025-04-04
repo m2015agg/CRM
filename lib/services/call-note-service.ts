@@ -1,46 +1,17 @@
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { getSupabaseClient } from '@/lib/supabase/client'
 import { BaseService } from "./base-service"
+import type { Database } from "@/lib/database.types"
 import { deleteFile } from "@/lib/storage-utils"
-import { formatDate } from "@/lib/utils"
 
-type CallNote = {
-  id: string
-  submitter_id: string
-  client_name: string
-  contact_name: string | null
-  location_type: string | null
-  call_date: string
-  notes: string
-  attachments: string[] | null
-  created_at: string
-  updated_at: string
-}
-
-type CallNoteInsert = Omit<CallNote, "id" | "created_at" | "updated_at">
-type CallNoteUpdate = Partial<CallNoteInsert>
+type CallNote = Database["public"]["Tables"]["call_notes"]["Row"]
+type CallNoteInsert = Database["public"]["Tables"]["call_notes"]["Insert"]
+type CallNoteUpdate = Database["public"]["Tables"]["call_notes"]["Update"]
 
 export class CallNoteService extends BaseService {
-  constructor() {
-    super()
-  }
-
-  private formatDate(date: Date | string): string {
-    return formatDate(date)
-  }
-
-  private async getCurrentUserId(): Promise<string> {
-    const supabase = getSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('User not authenticated')
-    return user.id
-  }
-
-  private handleError(error: any, context: string): never {
-    console.error(`Error in ${context}:`, error)
-    throw error
-  }
-
+  /**
+   * Create a new call note
+   * @param data Call note data
+   * @returns The created call note
+   */
   async create(data: {
     client_name: string
     contact_name?: string | null
@@ -62,11 +33,7 @@ export class CallNoteService extends BaseService {
         attachments: data.attachments && data.attachments.length > 0 ? data.attachments : null,
       }
 
-      const { data: result, error } = await this.supabase
-        .from("call_notes")
-        .insert(callNoteData)
-        .select()
-        .single()
+      const { data: result, error } = await this.supabase.from("call_notes").insert(callNoteData).select().single()
 
       if (error) {
         this.handleError(error, "create call note")
@@ -78,13 +45,14 @@ export class CallNoteService extends BaseService {
     }
   }
 
+  /**
+   * Get a call note by ID
+   * @param id Call note ID
+   * @returns The call note or null if not found
+   */
   async getById(id: string): Promise<CallNote | null> {
     try {
-      const { data, error } = await this.supabase
-        .from("call_notes")
-        .select("*")
-        .eq("id", id)
-        .single()
+      const { data, error } = await this.supabase.from("call_notes").select("*").eq("id", id).single()
 
       if (error) {
         if (error.code === "PGRST116") {
@@ -99,6 +67,11 @@ export class CallNoteService extends BaseService {
     }
   }
 
+  /**
+   * Get call notes for a user within a date range
+   * @param options Query options
+   * @returns Array of call notes
+   */
   async getAll(
     options: {
       userId?: string
@@ -147,10 +120,15 @@ export class CallNoteService extends BaseService {
       return data || []
     } catch (error) {
       this.handleError(error, "get call notes")
-      return []
     }
   }
 
+  /**
+   * Update a call note
+   * @param id Call note ID
+   * @param data Update data
+   * @returns The updated call note
+   */
   async update(
     id: string,
     data: {
@@ -164,12 +142,12 @@ export class CallNoteService extends BaseService {
   ): Promise<CallNote> {
     try {
       const updateData: CallNoteUpdate = {
-        client_name: data.client_name,
-        contact_name: data.contact_name,
-        location_type: data.location_type,
-        call_date: data.call_date ? this.formatDate(data.call_date) : undefined,
-        notes: data.notes,
-        attachments: data.attachments,
+        ...data,
+        updated_at: new Date().toISOString(),
+      }
+
+      if (data.call_date) {
+        updateData.call_date = this.formatDate(data.call_date)
       }
 
       const { data: result, error } = await this.supabase
@@ -189,6 +167,11 @@ export class CallNoteService extends BaseService {
     }
   }
 
+  /**
+   * Delete a call note and its attachments
+   * @param id Call note ID
+   * @returns True if successful
+   */
   async delete(id: string): Promise<boolean> {
     try {
       // First get the call note to access its attachments
@@ -201,7 +184,7 @@ export class CallNoteService extends BaseService {
       // Delete attachments if they exist
       if (callNote.attachments && callNote.attachments.length > 0) {
         await Promise.all(
-          callNote.attachments.map(async (url: string) => {
+          callNote.attachments.map(async (url) => {
             try {
               await deleteFile(url)
             } catch (err) {
@@ -222,10 +205,15 @@ export class CallNoteService extends BaseService {
       return true
     } catch (error) {
       this.handleError(error, "delete call note")
-      return false
     }
   }
 
+  /**
+   * Add an attachment to a call note
+   * @param id Call note ID
+   * @param attachmentUrl URL of the attachment
+   * @returns The updated call note
+   */
   async addAttachment(id: string, attachmentUrl: string): Promise<CallNote> {
     try {
       // Get current attachments
@@ -245,6 +233,12 @@ export class CallNoteService extends BaseService {
     }
   }
 
+  /**
+   * Remove an attachment from a call note
+   * @param id Call note ID
+   * @param attachmentUrl URL of the attachment to remove
+   * @returns The updated call note
+   */
   async removeAttachment(id: string, attachmentUrl: string): Promise<CallNote> {
     try {
       // Get current attachments
@@ -259,7 +253,7 @@ export class CallNoteService extends BaseService {
       }
 
       // Filter out the attachment to remove
-      const updatedAttachments = callNote.attachments.filter((url: string) => url !== attachmentUrl)
+      const updatedAttachments = callNote.attachments.filter((url) => url !== attachmentUrl)
 
       // Try to delete the file from storage
       try {
